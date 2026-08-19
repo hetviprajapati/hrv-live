@@ -41,7 +41,15 @@
     transform: translateX(-50%);
   }
 }
-
+.hrv-live {
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  align-content: center;
+}
 .terminal-header {
   display: flex;
   justify-content: space-between;
@@ -62,7 +70,9 @@
   min-width: 780px;
 }
 .workspace-scroll {
+  width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -133,6 +143,7 @@
   border: 1px dashed #333;
   padding: 15px 10px;
   text-align: center;
+  min-width: 0;
 }
 .gauge-value {
   font-size: 42px;
@@ -144,6 +155,7 @@
   font-size: 11px;
   color: var(--dim-orange);
   letter-spacing: 1px;
+  white-space: nowrap;
 }
 
 .watchlist {
@@ -156,6 +168,7 @@
   justify-content: space-between;
   padding: 3px 4px;
   font-size: 12px;
+  gap: 10px;
 }
 .wl-row:nth-child(odd) {
   background: #0a0a0a;
@@ -167,6 +180,7 @@
 .wl-val {
   font-weight: bold;
   color: var(--bbg-white);
+  white-space: nowrap;
 }
 
 .graph-area {
@@ -197,6 +211,7 @@
   padding: 2px 0;
   display: flex;
   justify-content: space-between;
+  gap: 8px;
 }
 .log-line span {
   color: #fff;
@@ -232,6 +247,7 @@
   padding: 12px;
   font-family: inherit;
   font-size: 14px;
+  min-width: 0;
 }
 
 .fkey-bar {
@@ -239,6 +255,7 @@
   display: flex;
   gap: 2px;
   flex-wrap: wrap;
+  padding-bottom: 20px;
 }
 .fkey {
   background: #111;
@@ -262,10 +279,85 @@
   margin-bottom: 4px;
 }
 
-@media (max-width: 1024px) {
+@media (min-width: 701px) and (max-width: 1024px) {
+  body {
+    padding: 10px;
+  }
+
   .workspace {
-    grid-template-columns: 220px minmax(0, 1fr) 240px;
-    min-width: 700px;
+    grid-template-columns: 180px minmax(0, 1fr) 180px;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .panel {
+    min-width: 0;
+  }
+
+  .vector-box {
+    min-height: 220px;
+  }
+
+  .heart-wireframe {
+    width: 120px;
+    height: 120px;
+  }
+
+  .gauge-value {
+    font-size: 34px;
+  }
+
+  .gauge-label {
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .ticker-grid {
+    gap: 10px;
+  }
+
+  .gauge-block {
+    padding: 12px 6px;
+  }
+
+  .watchlist {
+    margin-top: 10px;
+  }
+
+  .wl-row {
+    font-size: 11px;
+  }
+
+  .graph-area {
+    height: 140px;
+  }
+
+  .ledger-box {
+    max-height: 420px;
+  }
+
+  .log-stream {
+    font-size: 11px;
+  }
+
+  .control-dock {
+    gap: 10px;
+  }
+
+  .action-btn {
+    font-size: 14px;
+    padding: 11px 16px;
+  }
+
+  .cmd-line {
+    font-size: 12px;
+    padding: 10px;
+  }
+
+  .fkey {
+    font-size: 10px;
+    padding: 5px 6px;
+    min-width: 70px;
   }
 }
 
@@ -276,14 +368,13 @@
 
   .workspace-scroll {
     overflow-x: visible;
+    width: 100%;
   }
 
   .workspace {
     width: 100%;
     min-width: 0;
-
     grid-template-columns: 1fr;
-
     gap: 10px;
   }
 
@@ -292,12 +383,22 @@
     width: 100%;
   }
 
+  .vector-box {
+    min-height: 200px;
+  }
+
+  .heart-wireframe {
+    width: 120px;
+    height: 120px;
+  }
+
   .gauge-value {
     font-size: 30px;
   }
 
-  .heart-wireframe {
-    max-width: 100%;
+  .gauge-label {
+    font-size: 9px;
+    white-space: nowrap;
   }
 
   .ticker-grid {
@@ -305,18 +406,48 @@
     gap: 10px;
   }
 
+  .gauge-block {
+    padding: 12px 6px;
+  }
+
+  .watchlist {
+    margin-top: 10px;
+  }
+
+  .wl-row {
+    font-size: 11px;
+  }
+
+  .graph-area {
+    width: 100%;
+    height: 130px;
+  }
+
+  .ledger-box {
+    max-height: 300px;
+  }
+
+  .log-stream {
+    font-size: 11px;
+  }
+
   .control-dock {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
   }
 
   .action-btn {
     width: 100%;
+    font-size: 13px;
+    padding: 11px 14px;
   }
 
   .cmd-line {
     width: 100%;
     min-width: 0;
+    font-size: 11px;
+    padding: 10px;
   }
 
   .fkey-bar {
@@ -328,14 +459,20 @@
   .fkey {
     min-width: 0;
     width: 100%;
+    padding: 5px 3px;
+    font-size: 9px;
   }
 
-  .graph-area {
-    width: 100%;
+  .fkey-num {
+    font-size: 9px;
   }
 }
 
 @media (max-width: 400px) {
+  body {
+    padding: 8px;
+  }
+
   .gauge-value {
     font-size: 26px;
   }
@@ -344,9 +481,53 @@
     padding: 10px;
   }
 
+  .panel-title {
+    font-size: 10px;
+  }
+
+  .vector-box {
+    min-height: 180px;
+  }
+
   .heart-wireframe {
     width: 110px;
     height: 110px;
+  }
+
+  .gauge-label {
+    font-size: 8px;
+  }
+
+  .ticker-grid {
+    gap: 8px;
+  }
+
+  .gauge-block {
+    padding: 10px 5px;
+  }
+
+  .wl-row {
+    font-size: 10px;
+  }
+
+  .graph-area {
+    height: 115px;
+  }
+
+  .ledger-box {
+    max-height: 260px;
+  }
+
+  .log-stream {
+    font-size: 10px;
+  }
+
+  .action-btn {
+    font-size: 12px;
+  }
+
+  .cmd-line {
+    font-size: 10px;
   }
 
   .fkey-bar {
@@ -354,6 +535,6 @@
   }
 
   .fkey {
-    min-width: 0;
+    font-size: 10px;
   }
 }

@@ -20,6 +20,6 @@ body {
   font-family: 'Consolas', 'Courier New', Courier, monospace;
   min-height: 100vh;
   padding: 15px;
-  overflow-x: hidden;
+  overflow: hidden;
   font-size: 13px;
 }
