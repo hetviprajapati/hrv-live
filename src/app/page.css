@@ -1,4 +1,3 @@
-
 .ticker-tape {
   overflow: hidden;
   white-space: nowrap;
@@ -65,25 +64,6 @@
 .workspace-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-}
-@media (max-width: 1024px) {
-  .workspace {
-    grid-template-columns: 220px 1fr 240px;
-    min-width: 700px;
-  }
-}
-@media (max-width: 700px) {
-  .workspace {
-    grid-template-columns: 180px 1fr 200px;
-    gap: 10px;
-    min-width: 560px;
-  }
-  .gauge-value {
-    font-size: 30px;
-  }
-  body {
-    padding: 10px;
-  }
 }
 
 .panel {
@@ -280,4 +260,100 @@
   font-size: 10px;
   padding: 1px 0;
   margin-bottom: 4px;
+}
+
+@media (max-width: 1024px) {
+  .workspace {
+    grid-template-columns: 220px minmax(0, 1fr) 240px;
+    min-width: 700px;
+  }
+}
+
+@media (max-width: 700px) {
+  body {
+    padding: 10px;
+  }
+
+  .workspace-scroll {
+    overflow-x: visible;
+  }
+
+  .workspace {
+    width: 100%;
+    min-width: 0;
+
+    grid-template-columns: 1fr;
+
+    gap: 10px;
+  }
+
+  .panel {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .gauge-value {
+    font-size: 30px;
+  }
+
+  .heart-wireframe {
+    max-width: 100%;
+  }
+
+  .ticker-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .control-dock {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-btn {
+    width: 100%;
+  }
+
+  .cmd-line {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .fkey-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+
+  .fkey {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .graph-area {
+    width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  .gauge-value {
+    font-size: 26px;
+  }
+
+  .panel {
+    padding: 10px;
+  }
+
+  .heart-wireframe {
+    width: 110px;
+    height: 110px;
+  }
+
+  .fkey-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .fkey {
+    min-width: 0;
+  }
 }
