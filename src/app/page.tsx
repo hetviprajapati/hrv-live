@@ -12,6 +12,7 @@ type LogEntry = {
 export default function HrvLivePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bluetoothDeviceRef = useRef<any | null>(null);
 
   const rrHistoryRef = useRef<number[]>([]);
   const rmssdHistoryRef = useRef<number[]>([]);
@@ -37,11 +38,44 @@ export default function HrvLivePage() {
     },
   ]);
 
-  /*
-   * ---------------------------------------------------------
-   * RMSSD CALCULATION
-   * ---------------------------------------------------------
-   */
+  const resetLiveData = useCallback(() => {
+    setConnected(false);
+    setDeviceName('');
+
+    setHeartRate(null);
+    setRmssd(null);
+    setSdnn(null);
+    setPnn50(null);
+    setAvgRmssd(null);
+    setDelta(null);
+    setTraceData([]);
+
+    rrHistoryRef.current = [];
+    rmssdHistoryRef.current = [];
+    lastRmssdRef.current = null;
+
+    setLogs([
+      {
+        timestamp: '',
+        rr: 0,
+      },
+    ]);
+  }, []);
+
+  const handleDeviceDisconnected = useCallback(
+    (event?: Event) => {
+      const disconnectedDevice = event?.target ? event.target : bluetoothDeviceRef.current;
+
+      if (disconnectedDevice) {
+        disconnectedDevice.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+      }
+
+      bluetoothDeviceRef.current = null;
+
+      resetLiveData();
+    },
+    [resetLiveData],
+  );
 
   const calculateRmssd = useCallback((rrValues: number[]) => {
     if (rrValues.length < 2) {
@@ -284,12 +318,6 @@ export default function HrvLivePage() {
     };
   }, [traceData, connected]);
 
-  /*
-   * ---------------------------------------------------------
-   * PROCESS HEART RATE
-   * ---------------------------------------------------------
-   */
-
   const processHeartRate = useCallback(
     (bpm: number, rr: number) => {
       rrHistoryRef.current.push(rr);
@@ -305,11 +333,36 @@ export default function HrvLivePage() {
     [calculateRmssd, updateExtendedMetrics],
   );
 
-  /*
-   * ---------------------------------------------------------
-   * CONNECT POLAR H10
-   * ---------------------------------------------------------
-   */
+  const handleHeartRateMeasurement = useCallback(
+    (event: Event) => {
+      const target = event.target as any | null;
+
+      const payload = target?.value;
+
+      if (!payload) return;
+
+      const flags = payload.getUint8(0);
+
+      const is16Bit = Boolean(flags & 0x01);
+
+      const offset = is16Bit ? 3 : 2;
+
+      const bpm = is16Bit ? payload.getUint16(1, true) : payload.getUint8(1);
+
+      if (!(flags & 0x10)) {
+        return;
+      }
+
+      for (let i = offset; i < payload.byteLength; i += 2) {
+        const rawRr = payload.getUint16(i, true);
+
+        const rrMs = Math.round((rawRr / 1024) * 1000);
+
+        processHeartRate(bpm, rrMs);
+      }
+    },
+    [processHeartRate],
+  );
 
   const connectPolar = async () => {
     if (!(navigator as any).bluetooth) {
@@ -334,6 +387,9 @@ export default function HrvLivePage() {
         ],
       });
 
+      bluetoothDeviceRef.current = device as any;
+      device.addEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
       /*
        * Connect GATT
        */
@@ -344,23 +400,11 @@ export default function HrvLivePage() {
         throw new Error('Could not connect to device.');
       }
 
-      /*
-       * Heart Rate service
-       */
-
       const service = await server.getPrimaryService('heart_rate');
-
-      /*
-       * Heart Rate characteristic
-       */
 
       const characteristic = await service.getCharacteristic('heart_rate_measurement');
 
       await characteristic.startNotifications();
-
-      /*
-       * Connected
-       */
 
       setConnected(true);
       setDemoMode(false);
@@ -374,36 +418,42 @@ export default function HrvLivePage() {
         },
       ]);
 
-      /*
-       * Receive measurements
-       */
-
-      characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
-        const target = event.target as any;
-        const payload = target.value;
-        if (!payload) return;
-        const flags = payload.getUint8(0);
-        const is16Bit = Boolean(flags & 0x01);
-        const offset = is16Bit ? 3 : 2;
-        const bpm = is16Bit ? payload.getUint16(1, true) : payload.getUint8(1);
-
-        /*
-         * RR interval present
-         */
-
-        if (!(flags & 0x10)) {
-          return;
-        }
-
-        for (let i = offset; i < payload.byteLength; i += 2) {
-          const rawRr = payload.getUint16(i, true);
-          const rrMs = Math.round((rawRr / 1024) * 1000);
-          processHeartRate(bpm, rrMs);
-        }
-      });
+      characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
     } catch (error) {
       console.error(error);
+
+      const device = bluetoothDeviceRef.current;
+
+      if (device) {
+        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+      }
+
+      bluetoothDeviceRef.current = null;
+
       setConnected(false);
+    }
+  };
+
+  const disconnectPolar = () => {
+    const device = bluetoothDeviceRef.current;
+
+    if (!device) {
+      resetLiveData();
+
+      return;
+    }
+
+    try {
+      device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
+      if (device.gatt?.connected) {
+        device.gatt.disconnect();
+      }
+    } catch (error) {
+      console.error('Bluetooth disconnect error:', error);
+    } finally {
+      bluetoothDeviceRef.current = null;
+      resetLiveData();
     }
   };
 
@@ -478,9 +528,22 @@ export default function HrvLivePage() {
     return () => {
       if (simulationRef.current) {
         clearInterval(simulationRef.current);
+        simulationRef.current = null;
+      }
+
+      const device = bluetoothDeviceRef.current;
+
+      if (device) {
+        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
+        if (device.gatt?.connected) {
+          device.gatt.disconnect();
+        }
+
+        bluetoothDeviceRef.current = null;
       }
     };
-  }, []);
+  }, [handleDeviceDisconnected]);
 
   /*
    * ---------------------------------------------------------
@@ -648,7 +711,7 @@ export default function HrvLivePage() {
       {/* Control Dock */}
 
       <div className="control-dock">
-        <button className="action-btn" onClick={connectPolar}>
+        <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
           {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Hardware'}
         </button>
 
