@@ -756,7 +756,7 @@ export default function HrvLivePage() {
               <div className="wl-row">
                 <span className="wl-label">CLEAN INTERVALS</span>
                 <span className="wl-val tk-cyan">
-                  {snapshot.validDiffs} / {snapshot.windowSize}
+                  {snapshot.validDiffs} / {Math.max(0, snapshot.windowSize - 1)}
                 </span>
               </div>
             </div>
