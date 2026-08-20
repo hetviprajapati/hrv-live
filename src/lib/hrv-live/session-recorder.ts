@@ -272,27 +272,124 @@ export class SessionRecorder {
 }
 
 /**
- * Trigger a browser download of the recording.
+ * How the recording actually left the app.
  *
- * Deliberately client-side only. The file lands in the user's Downloads folder
- * and goes nowhere until they send it.
+ * There is no single save mechanism that works everywhere. On iPadOS the app
+ * runs inside Bluefy (a WKWebView browser), because neither Safari nor Chrome
+ * on iOS implements Web Bluetooth at all — so any user with a live feed on an
+ * iPad is in a WKWebView, and in a WKWebView an `<a download>` pointing at a
+ * blob URL does nothing whatsoever. No error, no file, no clue.
+ */
+export type SaveOutcome =
+  | { method: 'share'; filename: string; bytes: number }
+  | { method: 'download'; filename: string; bytes: number }
+  | { method: 'clipboard'; filename: string; bytes: number }
+  | { method: 'cancelled'; filename: string; bytes: number }
+  | { method: 'failed'; filename: string; bytes: number; reason: string };
+
+function recordingFilename(recording: SessionRecording): string {
+  const stamp = recording.startedAt.replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
+
+  return `hrv-session_${recording.mode}_${stamp}.json`;
+}
+
+/** Compact, not pretty-printed. Halves the size, and nobody reads it by eye. */
+function recordingJson(recording: SessionRecording): string {
+  return JSON.stringify(recording);
+}
+
+/**
+ * Save the recording to wherever this device can put it.
+ *
+ * IMPORTANT: call this synchronously from the click handler. iOS only allows
+ * the share sheet to open while a user gesture is still live, and any `await`
+ * before `navigator.share()` forfeits that gesture.
+ */
+export async function saveRecording(recording: SessionRecording): Promise<SaveOutcome> {
+  const filename = recordingFilename(recording);
+  const json = recordingJson(recording);
+  const bytes = json.length;
+  const blob = new Blob([json], { type: 'application/json' });
+
+  const nav = navigator as any;
+
+  /* 1. Share sheet — the only thing that reliably works on iPad. */
+  if (typeof File === 'function' && nav.share && nav.canShare) {
+    try {
+      const file = new File([blob], filename, { type: 'application/json' });
+
+      if (nav.canShare({ files: [file] })) {
+        await nav.share({ files: [file], title: filename });
+
+        return { method: 'share', filename, bytes };
+      }
+    } catch (error) {
+      // A user who taps Cancel has not hit a bug. Falling through to a silent
+      // download here would be worse than stopping.
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { method: 'cancelled', filename, bytes };
+      }
+    }
+  }
+
+  /* 2. Anchor download — desktop Chrome, Edge, Firefox, Android Chrome. */
+  try {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    anchor.style.display = 'none';
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+    return { method: 'download', filename, bytes };
+  } catch (error) {
+    // Fall through.
+  }
+
+  /* 3. Clipboard — last resort, but it always leaves the user with the data. */
+  try {
+    if (nav.clipboard?.writeText) {
+      await nav.clipboard.writeText(json);
+
+      return { method: 'clipboard', filename, bytes };
+    }
+  } catch (error) {
+    // Fall through.
+  }
+
+  return {
+    method: 'failed',
+    filename,
+    bytes,
+    reason: 'No save mechanism available in this browser',
+  };
+}
+
+/** Copy the recording as text. Offered as an explicit escape hatch. */
+export async function copyRecordingToClipboard(recording: SessionRecording): Promise<boolean> {
+  try {
+    await (navigator as any).clipboard.writeText(recordingJson(recording));
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Legacy name, kept so existing call sites do not break.
+ *
+ * @deprecated Use `saveRecording`, which handles iPadOS.
  */
 export function downloadRecording(recording: SessionRecording): string {
-  const stamp = recording.startedAt.replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-  const filename = `hrv-session_${recording.mode}_${stamp}.json`;
+  void saveRecording(recording);
 
-  const blob = new Blob([JSON.stringify(recording, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-
-  // Give the browser a moment to start the download before revoking.
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-
-  return filename;
+  return recordingFilename(recording);
 }

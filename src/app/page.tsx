@@ -11,7 +11,7 @@ import {
   type PendingResolution,
   type SignalQuality,
 } from '@/lib/hrv-live/hrv-engine';
-import { SessionRecorder, downloadRecording } from '@/lib/hrv-live/session-recorder';
+import { SessionRecorder, saveRecording, copyRecordingToClipboard } from '@/lib/hrv-live/session-recorder';
 
 /* ------------------------------------------------------------------ *
  * Types
@@ -58,6 +58,7 @@ const PACKET_GAP_MS = 2500;
 const APP_VERSION = '2.1.0';
 
 const MAX_LOG_ROWS = 40;
+const VISIBLE_LOG_ROWS = 18;
 const MAX_TRACE_POINTS = 60;
 
 /* ------------------------------------------------------------------ *
@@ -134,7 +135,6 @@ function niceCeiling(value: number): number {
 
 export default function HrvLivePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const logStreamRef = useRef<HTMLDivElement>(null);
   const simulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bluetoothDeviceRef = useRef<any | null>(null);
   const characteristicRef = useRef<any | null>(null);
@@ -512,14 +512,6 @@ export default function HrvLivePage() {
     simulationRef.current = setInterval(pushSimulatedReading, 900);
   };
 
-  /* ---------------------------------------------------------------- *
-   * Session export
-   *
-   * This is the diagnostic loop. "It freezes up a bit" is a symptom; this
-   * turns it into a file that can be replayed beat for beat offline, against
-   * any filter setting, without needing the device in hand.
-   * ---------------------------------------------------------------- */
-
   const exportRecording = useCallback(() => {
     const recorder = recorderRef.current;
 
@@ -528,19 +520,60 @@ export default function HrvLivePage() {
       return;
     }
 
-    try {
-      const recording = recorder.build(APP_VERSION, DEFAULT_CONFIG, Date.now());
-      const filename = downloadRecording(recording);
+    // Build synchronously and hand straight to saveRecording. On iPadOS the
+    // share sheet may only open while the tap that triggered it is still the
+    // live user gesture, and any await before that point forfeits it.
+    const recording = recorder.build(APP_VERSION, DEFAULT_CONFIG, Date.now());
+    const stats =
+      `${recording.summary.beats} BEATS, ${Math.round(recording.durationMs / 1000)}s, ` +
+      `${recording.summary.corrected} CORRECTED, ${recording.summary.rejected} REJECTED`;
 
-      setExportNote(
-        `SAVED ${filename} — ${recording.summary.beats} BEATS, ` +
-          `${Math.round(recording.durationMs / 1000)}s, ` +
-          `${recording.summary.corrected} CORRECTED, ${recording.summary.rejected} REJECTED`,
-      );
-    } catch (error) {
-      console.error(error);
-      setExportNote('EXPORT FAILED — SEE BROWSER CONSOLE');
+    setExportNote('PREPARING SESSION LOG...');
+
+    saveRecording(recording)
+      .then((outcome) => {
+        const kb = Math.round(outcome.bytes / 1024);
+
+        switch (outcome.method) {
+          case 'share':
+            setExportNote(`SHARED ${outcome.filename} (${kb} KB) — ${stats}`);
+            break;
+          case 'download':
+            setExportNote(`SAVED TO DOWNLOADS: ${outcome.filename} (${kb} KB) — ${stats}`);
+            break;
+          case 'clipboard':
+            setExportNote(`COPIED TO CLIPBOARD (${kb} KB) — PASTE INTO A MESSAGE OR NOTE`);
+            break;
+          case 'cancelled':
+            setExportNote('SAVE CANCELLED');
+            break;
+          default:
+            setExportNote(`COULD NOT SAVE — ${outcome.reason}. TRY "COPY LOG" INSTEAD.`);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        setExportNote('EXPORT FAILED — SEE BROWSER CONSOLE');
+      });
+  }, []);
+
+  /**
+   * Explicit escape hatch. If a browser blocks both the share sheet and the
+   * download, the data can still be got out by pasting it somewhere.
+   */
+  const copyRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+
+    if (recorder.isEmpty) {
+      setExportNote('NOTHING RECORDED YET — CONNECT AND WEAR THE STRAP FIRST');
+      return;
     }
+
+    const recording = recorder.build(APP_VERSION, DEFAULT_CONFIG, Date.now());
+
+    copyRecordingToClipboard(recording).then((ok) => {
+      setExportNote(ok ? `COPIED ${recording.summary.beats} BEATS TO CLIPBOARD — PASTE INTO A MESSAGE` : 'CLIPBOARD BLOCKED BY BROWSER');
+    });
   }, []);
 
   /* ---------------------------------------------------------------- *
@@ -703,10 +736,6 @@ export default function HrvLivePage() {
    * Render
    * ---------------------------------------------------------------- */
 
-  useEffect(() => {
-    if (logStreamRef.current) logStreamRef.current.scrollTop = 0;
-  }, [logs]);
-
   return (
     <main className="hrv-live">
       <div className="terminal-header">
@@ -842,7 +871,9 @@ export default function HrvLivePage() {
           <div className="panel ledger-box">
             <div className="panel-title">RR INTERVAL HISTORY LOG</div>
 
-            <div className="log-stream" ref={logStreamRef}>
+            <div className="log-stream">
+              {' '}
+              {/* ref removed */}
               {logs.length === 0 ? (
                 <>
                   <div className="log-line">SYSTEM STATUS: IDLE...</div>
@@ -851,17 +882,29 @@ export default function HrvLivePage() {
                   <div className="log-line">AWAITING POLAR PACKETS...</div>
                 </>
               ) : (
-                logs.map((log) => (
-                  <div className="log-line" key={log.id}>
-                    <span>{log.timestamp}</span>
-                    <span className={STATUS_CLASS[log.status]}>
-                      {STATUS_MARK[log.status]} RR={log.raw}ms
-                      {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
-                    </span>
-                    {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
-                    {log.demo ? ' (demo)' : ''}
-                  </div>
-                ))
+                Array.from({ length: VISIBLE_LOG_ROWS }, (_, slot) => {
+                  const log = logs[slot];
+
+                  if (!log) {
+                    return (
+                      <div className="log-line" key={`slot-${slot}`}>
+                        &nbsp;
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="log-line" key={`slot-${slot}`}>
+                      <span>{log.timestamp}</span>
+                      <span className={STATUS_CLASS[log.status]}>
+                        {STATUS_MARK[log.status]} RR={log.raw}ms
+                        {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
+                      </span>
+                      {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
+                      {log.demo ? ' (demo)' : ''}
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
@@ -884,6 +927,14 @@ export default function HrvLivePage() {
           title="Download this session as a file you can send for analysis"
         >
           ⤓ SAVE SESSION LOG{recordedBeats > 0 ? ` (${recordedBeats.toLocaleString()})` : ''}
+        </button>
+        <button
+          className="action-btn"
+          onClick={copyRecording}
+          disabled={recordedBeats === 0}
+          title="Copy the session log as text, if saving a file is blocked"
+        >
+          ⧉ COPY LOG
         </button>
 
         <input
