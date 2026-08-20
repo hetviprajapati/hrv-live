@@ -2,307 +2,575 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './page.css';
+import {
+  HrvEngine,
+  parseHeartRateMeasurement,
+  type CorrectionKind,
+  type HrvSnapshot,
+  type PendingResolution,
+  type SignalQuality,
+} from '@/lib/hrv-live/hrv-engine';
+
+/* ------------------------------------------------------------------ *
+ * Types
+ * ------------------------------------------------------------------ */
+
+type BeatStatus = 'ok' | 'held' | 'corrected' | 'rejected';
 
 type LogEntry = {
+  id: number;
   timestamp: string;
-  rr: number;
+  /** The value the sensor actually reported. Always shown, never hidden. */
+  raw: number;
+  /** The value used in the calculation, when it differs from the raw one. */
+  used: number | null;
+  status: BeatStatus;
+  note: string;
   demo?: boolean;
 };
+
+const EMPTY_SNAPSHOT: HrvSnapshot = {
+  heartRate: null,
+  rmssd: null,
+  sdnn: null,
+  pnn50: null,
+  avgRmssd60s: null,
+  meanRr: null,
+  quality: 'acquiring',
+  artifactRate: 0,
+  beatsSeen: 0,
+  beatsClean: 0,
+  beatsCorrected: 0,
+  beatsRejected: 0,
+  validDiffs: 0,
+  windowSize: 0,
+  ready: false,
+};
+
+/**
+ * A Polar H10 notifies roughly once per second. Anything much beyond that means
+ * packets were lost, and the beats either side of the hole are not successive.
+ */
+const PACKET_GAP_MS = 2500;
+
+const MAX_LOG_ROWS = 40;
+const MAX_TRACE_POINTS = 60;
+
+/* ------------------------------------------------------------------ *
+ * Presentation helpers
+ * ------------------------------------------------------------------ */
+
+const QUALITY_LABEL: Record<SignalQuality, string> = {
+  acquiring: 'ACQUIRING',
+  excellent: 'EXCELLENT',
+  good: 'GOOD',
+  fair: 'FAIR',
+  poor: 'POOR',
+};
+
+const QUALITY_CLASS: Record<SignalQuality, string> = {
+  acquiring: 'tk-yellow',
+  excellent: 'tk-green',
+  good: 'tk-green',
+  fair: 'tk-yellow',
+  poor: 'tk-red',
+};
+
+const STATUS_CLASS: Record<BeatStatus, string> = {
+  ok: 'tk-green',
+  held: 'tk-yellow',
+  corrected: 'tk-yellow',
+  rejected: 'tk-red',
+};
+
+const STATUS_MARK: Record<BeatStatus, string> = {
+  ok: ' ',
+  held: '?',
+  corrected: '*',
+  rejected: 'x',
+};
+
+function correctionNote(event: { correction: CorrectionKind }): string {
+  switch (event.correction) {
+    case 'misplaced-pair':
+      return 'MISPLACED BEAT — TIMING REBUILT';
+    case 'missed-beat':
+      return 'MISSED BEAT — INSERTED';
+    case 'extra-beat':
+      return 'EXTRA DETECTION — MERGED';
+    case 'out-of-range':
+      return 'OUTSIDE PHYSIOLOGICAL RANGE';
+    case 'unrepairable':
+      return 'NOISE — DISCARDED';
+    default:
+      return '';
+  }
+}
+
+function formatTimestamp(date: Date): string {
+  return `${date.toTimeString().split(' ')[0]}.${String(date.getMilliseconds()).padStart(3, '0')}`;
+}
+
+/** Round a chart ceiling up to something a human would choose. */
+function niceCeiling(value: number): number {
+  const candidates = [25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
+
+  for (const candidate of candidates) {
+    if (value <= candidate) return candidate;
+  }
+
+  return Math.ceil(value / 100) * 100;
+}
+
+/* ------------------------------------------------------------------ *
+ * Page
+ * ------------------------------------------------------------------ */
 
 export default function HrvLivePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bluetoothDeviceRef = useRef<any | null>(null);
+  const characteristicRef = useRef<any | null>(null);
 
-  const rrHistoryRef = useRef<number[]>([]);
-  const rmssdHistoryRef = useRef<number[]>([]);
+  /**
+   * All signal processing lives here. The component only renders what the
+   * engine reports — it does no arithmetic on RR intervals of its own.
+   */
+  const engineRef = useRef<HrvEngine>(new HrvEngine());
+  const lastPacketAtRef = useRef<number | null>(null);
+  const logIdRef = useRef(0);
   const lastRmssdRef = useRef<number | null>(null);
 
   const [connected, setConnected] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [deviceName, setDeviceName] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [contactWarning, setContactWarning] = useState(false);
 
-  const [heartRate, setHeartRate] = useState<number | null>(null);
-  const [rmssd, setRmssd] = useState<number | null>(null);
-  const [sdnn, setSdnn] = useState<number | null>(null);
-  const [pnn50, setPnn50] = useState<number | null>(null);
-  const [avgRmssd, setAvgRmssd] = useState<number | null>(null);
+  const [snapshot, setSnapshot] = useState<HrvSnapshot>(EMPTY_SNAPSHOT);
   const [delta, setDelta] = useState<number | null>(null);
-
   const [traceData, setTraceData] = useState<number[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
-  const [logs, setLogs] = useState<LogEntry[]>([
-    {
-      timestamp: '',
-      rr: 0,
-    },
-  ]);
+  /* ---------------------------------------------------------------- *
+   * Session lifecycle
+   * ---------------------------------------------------------------- */
 
-  const resetLiveData = useCallback(() => {
-    setConnected(false);
-    setDeviceName('');
-
-    setHeartRate(null);
-    setRmssd(null);
-    setSdnn(null);
-    setPnn50(null);
-    setAvgRmssd(null);
-    setDelta(null);
-    setTraceData([]);
-
-    rrHistoryRef.current = [];
-    rmssdHistoryRef.current = [];
+  /**
+   * Clear everything that could carry across a session boundary.
+   *
+   * The previous version never emptied the RR buffer on connect, so beats from
+   * an earlier session — or from demo mode — stayed in the window and produced
+   * one enormous fabricated difference at the seam. Called on connect as well
+   * as on disconnect, deliberately.
+   */
+  const resetSession = useCallback(() => {
+    engineRef.current.reset();
+    lastPacketAtRef.current = null;
     lastRmssdRef.current = null;
 
-    setLogs([
-      {
-        timestamp: '',
-        rr: 0,
-      },
-    ]);
+    setSnapshot(EMPTY_SNAPSHOT);
+    setDelta(null);
+    setTraceData([]);
+    setLogs([]);
+    setContactWarning(false);
   }, []);
+
+  const teardownConnection = useCallback(() => {
+    setConnected(false);
+    setDeviceName('');
+    resetSession();
+  }, [resetSession]);
 
   const handleDeviceDisconnected = useCallback(
     (event?: Event) => {
-      const disconnectedDevice = event?.target ? event.target : bluetoothDeviceRef.current;
+      const device = (event?.target as any) ?? bluetoothDeviceRef.current;
 
-      if (disconnectedDevice) {
-        disconnectedDevice.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+      if (device) {
+        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
       }
 
       bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
 
-      resetLiveData();
+      teardownConnection();
+      setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
     },
-    [resetLiveData],
+    [teardownConnection],
   );
 
-  const calculateRmssd = useCallback((rrValues: number[]) => {
-    if (rrValues.length < 2) {
-      return 0;
-    }
+  /* ---------------------------------------------------------------- *
+   * Beat handling
+   * ---------------------------------------------------------------- */
 
-    let sumSq = 0;
+  const appendLog = useCallback((entry: Omit<LogEntry, 'id'>) => {
+    logIdRef.current += 1;
+    const withId: LogEntry = { ...entry, id: logIdRef.current };
 
-    for (let i = 1; i < rrValues.length; i++) {
-      const difference = rrValues[i] - rrValues[i - 1];
-
-      sumSq += difference * difference;
-    }
-
-    return Math.sqrt(sumSq / (rrValues.length - 1));
+    setLogs((previous) => [withId, ...previous].slice(0, MAX_LOG_ROWS));
   }, []);
 
-  /*
-   * ---------------------------------------------------------
-   * TIMESTAMP
-   * ---------------------------------------------------------
+  /**
+   * A pair correction resolves a beat that was logged one beat ago as "held".
+   * Reach back and relabel it so the log tells the truth about what happened.
    */
+  const relabelHeldEntry = useCallback((status: 'corrected' | 'rejected', used: number | null, note: string) => {
+    setLogs((previous) => {
+      const index = previous.findIndex((entry) => entry.status === 'held');
+      if (index === -1) return previous;
 
-  const formatTimestamp = () => {
-    const date = new Date();
-
-    return date.toTimeString().split(' ')[0] + '.' + String(date.getMilliseconds()).padStart(3, '0');
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * UPDATE METRICS
-   * ---------------------------------------------------------
-   */
-
-  const updateExtendedMetrics = useCallback((currentRmssd: number, bpm: number, rr: number, demo = false) => {
-    const calculatedSdnn = currentRmssd * 0.9;
-
-    const calculatedPnn50 = Math.min(45, Math.max(2, currentRmssd / 2));
-
-    rmssdHistoryRef.current.push(currentRmssd);
-
-    if (rmssdHistoryRef.current.length > 60) {
-      rmssdHistoryRef.current.shift();
-    }
-
-    const average = rmssdHistoryRef.current.reduce((sum, value) => sum + value, 0) / rmssdHistoryRef.current.length;
-
-    const previousRmssd = lastRmssdRef.current;
-
-    setHeartRate(bpm);
-    setRmssd(currentRmssd);
-    setSdnn(calculatedSdnn);
-    setPnn50(calculatedPnn50);
-    setAvgRmssd(average);
-
-    if (previousRmssd !== null) {
-      setDelta(currentRmssd - previousRmssd);
-    }
-
-    lastRmssdRef.current = currentRmssd;
-
-    /*
-     * Chart data
-     */
-
-    setTraceData((previous) => {
-      const next = [...previous, currentRmssd];
-
-      if (next.length > 60) {
-        next.shift();
-      }
+      const next = [...previous];
+      next[index] = { ...next[index], status, used, note };
 
       return next;
     });
-
-    /*
-     * RR log
-     */
-
-    setLogs((previous) => {
-      const next: LogEntry[] = [
-        {
-          timestamp: formatTimestamp(),
-          rr,
-          demo,
-        },
-        ...previous,
-      ];
-
-      return next.slice(0, 30);
-    });
   }, []);
 
-  /*
-   * ---------------------------------------------------------
-   * CANVAS GRAPH
-   * ---------------------------------------------------------
-   */
+  const applyPendingResolution = useCallback(
+    (resolution: PendingResolution) => {
+      const resolvedTo = resolution.emitted[0];
+
+      relabelHeldEntry(resolution.disposition, resolvedTo === undefined ? null : Math.round(resolvedTo), correctionNote(resolution));
+    },
+    [relabelHeldEntry],
+  );
+
+  const publish = useCallback((now: number) => {
+    const next = engineRef.current.snapshot(now);
+    setSnapshot(next);
+
+    if (next.rmssd !== null) {
+      const previous = lastRmssdRef.current;
+      setDelta(previous === null ? null : next.rmssd - previous);
+      lastRmssdRef.current = next.rmssd;
+
+      setTraceData((current) => [...current, next.rmssd as number].slice(-MAX_TRACE_POINTS));
+    }
+  }, []);
+
+  const ingestBeat = useCallback(
+    (rawRr: number, now: number, demo: boolean) => {
+      const event = engineRef.current.push(rawRr, now);
+      const stamp = formatTimestamp(new Date(now));
+      const rounded = Math.round(rawRr);
+
+      // A beat held on a previous call has now been judged one way or another.
+      // Reach back and give it its verdict so nothing sits at "held" forever.
+      if (event.pendingResolution) {
+        applyPendingResolution(event.pendingResolution);
+      }
+
+      if (event.disposition === 'corrected') {
+        const used = event.emitted[0] ?? null;
+
+        // A pair correction consumes the beat that was held last time round.
+        if (event.correction === 'misplaced-pair' || event.correction === 'extra-beat') {
+          relabelHeldEntry('corrected', used === null ? rounded : Math.round(used), correctionNote(event));
+        }
+
+        appendLog({
+          timestamp: stamp,
+          raw: rounded,
+          used: used === null ? null : Math.round(used),
+          status: 'corrected',
+          note: correctionNote(event),
+          demo,
+        });
+      } else if (event.disposition === 'rejected') {
+        // correction 'none' means the beat is being held for one beat to see
+        // whether its partner arrives and completes a repairable pair.
+        const held = event.correction === 'none';
+
+        appendLog({
+          timestamp: stamp,
+          raw: rounded,
+          used: null,
+          status: held ? 'held' : 'rejected',
+          note: held ? 'FLAGGED — AWAITING NEXT BEAT' : correctionNote(event),
+          demo,
+        });
+      } else {
+        appendLog({
+          timestamp: stamp,
+          raw: rounded,
+          used: null,
+          status: 'ok',
+          note: '',
+          demo,
+        });
+      }
+
+      publish(now);
+    },
+    [appendLog, applyPendingResolution, publish, relabelHeldEntry],
+  );
+
+  const handleHeartRateMeasurement = useCallback(
+    (event: Event) => {
+      const view = (event.target as any)?.value as DataView | undefined;
+      if (!view || view.byteLength === 0) return;
+
+      const now = Date.now();
+
+      let measurement;
+      try {
+        measurement = parseHeartRateMeasurement(view);
+      } catch {
+        return;
+      }
+
+      setContactWarning(measurement.sensorContact === 'supported-no-contact');
+
+      // Packet-level gap detection. The recorded sessions contain real
+      // five-second holes; without this the beats either side of one get
+      // treated as consecutive.
+      const lastPacketAt = lastPacketAtRef.current;
+      if (lastPacketAt !== null && now - lastPacketAt > PACKET_GAP_MS) {
+        const resolution = engineRef.current.markGap();
+        if (resolution) applyPendingResolution(resolution);
+      }
+      lastPacketAtRef.current = now;
+
+      if (measurement.rrIntervals.length === 0) {
+        // Heart rate without RR data — nothing to feed the engine, but the
+        // rate itself is still worth showing.
+        setSnapshot((current) => ({ ...current, heartRate: measurement.bpm }));
+        return;
+      }
+
+      for (const rr of measurement.rrIntervals) {
+        ingestBeat(rr, now, false);
+      }
+    },
+    [applyPendingResolution, ingestBeat],
+  );
+
+  /* ---------------------------------------------------------------- *
+   * Bluetooth
+   * ---------------------------------------------------------------- */
+
+  const connectPolar = async () => {
+    setErrorMessage('');
+
+    if (!(navigator as any).bluetooth) {
+      setErrorMessage('WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS');
+      return;
+    }
+
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        filters: [{ namePrefix: 'Polar' }, { services: ['heart_rate'] }],
+      });
+
+      // Wipe first. Whatever was in the buffers belongs to a different session.
+      resetSession();
+
+      bluetoothDeviceRef.current = device;
+      device.addEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
+      const server = await device.gatt?.connect();
+      if (!server) throw new Error('GATT connect failed');
+
+      const service = await server.getPrimaryService('heart_rate');
+      const characteristic = await service.getCharacteristic('heart_rate_measurement');
+
+      await characteristic.startNotifications();
+      characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+      characteristicRef.current = characteristic;
+
+      setConnected(true);
+      setDemoMode(false);
+      setDeviceName(device.name || 'POLAR DEVICE');
+    } catch (error) {
+      console.error(error);
+
+      const device = bluetoothDeviceRef.current;
+      if (device) device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
+      bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
+
+      setConnected(false);
+      setErrorMessage(
+        error instanceof Error && error.name === 'NotFoundError'
+          ? 'NO DEVICE SELECTED'
+          : 'CONNECTION FAILED — CHECK THE STRAP IS ON AND NOT PAIRED ELSEWHERE',
+      );
+    }
+  };
+
+  const disconnectPolar = () => {
+    const device = bluetoothDeviceRef.current;
+    const characteristic = characteristicRef.current;
+
+    try {
+      if (characteristic) {
+        characteristic.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+      }
+
+      if (device) {
+        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+        if (device.gatt?.connected) device.gatt.disconnect();
+      }
+    } catch (error) {
+      console.error('Bluetooth disconnect error:', error);
+    } finally {
+      bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
+      teardownConnection();
+    }
+  };
+
+  /* ---------------------------------------------------------------- *
+   * Demo mode
+   *
+   * Clearly labelled as simulated, and deliberately injects the same class of
+   * artifact the real device produces so the filter can be seen working. Safe
+   * to delete outright — nothing else depends on it.
+   * ---------------------------------------------------------------- */
+
+  const demoStateRef = useRef({ phase: 0, beatsUntilArtifact: 25 });
+
+  const pushSimulatedReading = useCallback(() => {
+    const state = demoStateRef.current;
+    const now = Date.now();
+
+    const baseRr = 880 + Math.sin(now / 12000) * 40;
+    state.phase += (2 * Math.PI * baseRr) / 5000; // ~5s breathing cycle
+
+    const rsa = Math.sin(state.phase) * 34;
+    const noise = (Math.random() - 0.5) * 16;
+    const rr = baseRr + rsa + noise;
+
+    state.beatsUntilArtifact -= 1;
+
+    if (state.beatsUntilArtifact <= 0) {
+      state.beatsUntilArtifact = 20 + Math.floor(Math.random() * 25);
+
+      // A misplaced detection: elapsed time is preserved across the pair,
+      // exactly as observed in the recorded H10 logs.
+      const shift = 180 + Math.random() * 120;
+      ingestBeat(rr - shift, now, true);
+      ingestBeat(rr + shift, now, true);
+      return;
+    }
+
+    ingestBeat(rr, now, true);
+  }, [ingestBeat]);
+
+  const toggleDemo = () => {
+    if (demoMode) {
+      if (simulationRef.current) clearInterval(simulationRef.current);
+      simulationRef.current = null;
+
+      setDemoMode(false);
+      setConnected(false);
+      setDeviceName('');
+      resetSession();
+
+      return;
+    }
+
+    resetSession();
+    demoStateRef.current = { phase: 0, beatsUntilArtifact: 25 };
+
+    setDemoMode(true);
+    setConnected(true);
+    setDeviceName('SIMULATED DEVICE');
+    setErrorMessage('');
+
+    simulationRef.current = setInterval(pushSimulatedReading, 900);
+  };
+
+  /* ---------------------------------------------------------------- *
+   * Chart
+   * ---------------------------------------------------------------- */
 
   useEffect(() => {
     const canvas = canvasRef.current;
-
     if (!canvas) return;
 
     const parent = canvas.parentElement;
-
     if (!parent) return;
 
     const ctx = canvas.getContext('2d');
-
     if (!ctx) return;
 
     const draw = () => {
       const width = parent.clientWidth;
       const height = parent.clientHeight;
-
       const dpr = window.devicePixelRatio || 1;
 
       canvas.width = width * dpr;
       canvas.height = height * dpr;
-
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
       ctx.clearRect(0, 0, width, height);
-
-      const SCALE_MAX = 100;
 
       const padTop = 14;
       const padBottom = 14;
-
       const usableHeight = height - padTop - padBottom;
 
-      /*
-       * Reference gridlines
-       */
+      // Auto-scaled. The previous version was hard-capped at 100ms, so every
+      // inflated reading drew as a flat line across the top of the panel —
+      // which is what the straight green line in the screenshots actually was.
+      const peak = traceData.length > 0 ? Math.max(...traceData) : 0;
+      const scaleMax = niceCeiling(Math.max(peak * 1.15, 50));
+
+      const yFor = (value: number) => padTop + usableHeight - (Math.max(0, Math.min(scaleMax, value)) / scaleMax) * usableHeight;
 
       ctx.strokeStyle = '#1a1a1a';
       ctx.lineWidth = 1;
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#4a4a4a';
 
-      [25, 50, 75].forEach((mark) => {
-        const y = padTop + usableHeight - (mark / SCALE_MAX) * usableHeight;
+      for (const fraction of [0.25, 0.5, 0.75, 1]) {
+        const mark = scaleMax * fraction;
+        const y = yFor(mark);
 
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
         ctx.stroke();
-      });
 
-      /*
-       * Idle state
-       */
+        ctx.fillText(`${Math.round(mark)}`, 2, y - 2);
+      }
 
       if (!connected || traceData.length === 0) {
         ctx.strokeStyle = '#3a2a10';
-        ctx.lineWidth = 1;
-
         ctx.beginPath();
         ctx.moveTo(0, height / 2);
-
         ctx.lineTo(width, height / 2);
-
         ctx.stroke();
-
         return;
       }
 
-      /*
-       * Create points
-       */
-
-      const points = traceData.map((value, index) => {
-        const x = (index / Math.max(1, traceData.length - 1)) * width;
-
-        const clamped = Math.max(0, Math.min(SCALE_MAX, value));
-
-        const y = padTop + usableHeight - (clamped / SCALE_MAX) * usableHeight;
-
-        return {
-          x,
-          y,
-          value,
-        };
-      });
-
-      /*
-       * Line color based on latest value
-       */
+      const points = traceData.map((value, index) => ({
+        x: (index / Math.max(1, traceData.length - 1)) * width,
+        y: yFor(value),
+        value,
+      }));
 
       const latest = points[points.length - 1].value;
-
       const lineColor = latest < 20 ? '#ff2a2a' : latest < 40 ? '#ffe14d' : '#3dff6e';
 
-      /*
-       * Draw line
-       */
-
       ctx.strokeStyle = lineColor;
-
       ctx.lineWidth = 2;
-
       ctx.beginPath();
-
       points.forEach((point, index) => {
-        if (index === 0) {
-          ctx.moveTo(point.x, point.y);
-        } else {
-          ctx.lineTo(point.x, point.y);
-        }
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
       });
-
       ctx.stroke();
 
-      /*
-       * Draw heartbeat dots
-       */
-
       points.forEach((point, index) => {
+        const isLatest = index === points.length - 1;
+
         ctx.beginPath();
-
-        ctx.arc(point.x, point.y, index === points.length - 1 ? 4 : 2.5, 0, Math.PI * 2);
-
-        ctx.fillStyle = index === points.length - 1 ? '#fff' : lineColor;
-
+        ctx.arc(point.x, point.y, isLatest ? 4 : 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = isLatest ? '#fff' : lineColor;
         ctx.fill();
       });
     };
@@ -310,219 +578,14 @@ export default function HrvLivePage() {
     draw();
 
     const resizeObserver = new ResizeObserver(draw);
-
     resizeObserver.observe(parent);
 
-    return () => {
-      resizeObserver.disconnect();
-    };
+    return () => resizeObserver.disconnect();
   }, [traceData, connected]);
 
-  const processHeartRate = useCallback(
-    (bpm: number, rr: number) => {
-      rrHistoryRef.current.push(rr);
-
-      if (rrHistoryRef.current.length > 40) {
-        rrHistoryRef.current.shift();
-      }
-
-      const currentRmssd = calculateRmssd(rrHistoryRef.current);
-
-      updateExtendedMetrics(currentRmssd, bpm, rr);
-    },
-    [calculateRmssd, updateExtendedMetrics],
-  );
-
-  const handleHeartRateMeasurement = useCallback(
-    (event: Event) => {
-      const target = event.target as any | null;
-
-      const payload = target?.value;
-
-      if (!payload) return;
-
-      const flags = payload.getUint8(0);
-
-      const is16Bit = Boolean(flags & 0x01);
-
-      const offset = is16Bit ? 3 : 2;
-
-      const bpm = is16Bit ? payload.getUint16(1, true) : payload.getUint8(1);
-
-      if (!(flags & 0x10)) {
-        return;
-      }
-
-      for (let i = offset; i < payload.byteLength; i += 2) {
-        const rawRr = payload.getUint16(i, true);
-
-        const rrMs = Math.round((rawRr / 1024) * 1000);
-
-        processHeartRate(bpm, rrMs);
-      }
-    },
-    [processHeartRate],
-  );
-
-  const connectPolar = async () => {
-    if (!(navigator as any).bluetooth) {
-      alert('Browser security blocks Web Bluetooth APIs. Please use Chrome, or Bluefy on iOS.');
-
-      return;
-    }
-
-    try {
-      /*
-       * Find Polar device
-       */
-
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          {
-            namePrefix: 'Polar',
-          },
-          {
-            services: ['heart_rate'],
-          },
-        ],
-      });
-
-      bluetoothDeviceRef.current = device as any;
-      device.addEventListener('gattserverdisconnected', handleDeviceDisconnected);
-
-      /*
-       * Connect GATT
-       */
-
-      const server = await device.gatt?.connect();
-
-      if (!server) {
-        throw new Error('Could not connect to device.');
-      }
-
-      const service = await server.getPrimaryService('heart_rate');
-
-      const characteristic = await service.getCharacteristic('heart_rate_measurement');
-
-      await characteristic.startNotifications();
-
-      setConnected(true);
-      setDemoMode(false);
-
-      setDeviceName(device.name || 'POLAR DEVICE');
-
-      setLogs([
-        {
-          timestamp: '',
-          rr: 0,
-        },
-      ]);
-
-      characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
-    } catch (error) {
-      console.error(error);
-
-      const device = bluetoothDeviceRef.current;
-
-      if (device) {
-        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-      }
-
-      bluetoothDeviceRef.current = null;
-
-      setConnected(false);
-    }
-  };
-
-  const disconnectPolar = () => {
-    const device = bluetoothDeviceRef.current;
-
-    if (!device) {
-      resetLiveData();
-
-      return;
-    }
-
-    try {
-      device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-
-      if (device.gatt?.connected) {
-        device.gatt.disconnect();
-      }
-    } catch (error) {
-      console.error('Bluetooth disconnect error:', error);
-    } finally {
-      bluetoothDeviceRef.current = null;
-      resetLiveData();
-    }
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * DEMO MODE
-   * ---------------------------------------------------------
-   */
-
-  const pushSimulatedReading = useCallback(() => {
-    const baseHr = 68 + Math.round(Math.sin(Date.now() / 4000) * 6);
-    const jitter = Math.round((Math.random() - 0.5) * 4);
-    const bpm = baseHr + jitter;
-    const baseRr = Math.round(60000 / bpm);
-    const rr = baseRr + Math.round((Math.random() - 0.5) * 40);
-    rrHistoryRef.current.push(rr);
-
-    if (rrHistoryRef.current.length > 40) {
-      rrHistoryRef.current.shift();
-    }
-
-    const currentRmssd = calculateRmssd(rrHistoryRef.current);
-    updateExtendedMetrics(currentRmssd, bpm, rr, true);
-  }, [calculateRmssd, updateExtendedMetrics]);
-
-  const toggleDemo = () => {
-    /*
-     * Stop demo
-     */
-
-    if (demoMode) {
-      if (simulationRef.current) {
-        clearInterval(simulationRef.current);
-      }
-
-      simulationRef.current = null;
-
-      setDemoMode(false);
-      setConnected(false);
-      setDeviceName('');
-
-      return;
-    }
-
-    /*
-     * Start demo
-     */
-
-    setDemoMode(true);
-    setConnected(true);
-
-    setDeviceName('SIMULATED DEVICE');
-
-    setLogs([
-      {
-        timestamp: '',
-        rr: 0,
-        demo: true,
-      },
-    ]);
-
-    simulationRef.current = setInterval(pushSimulatedReading, 900);
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * CLEANUP
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------- *
+   * Cleanup
+   * ---------------------------------------------------------------- */
 
   useEffect(() => {
     return () => {
@@ -532,39 +595,55 @@ export default function HrvLivePage() {
       }
 
       const device = bluetoothDeviceRef.current;
-
       if (device) {
         device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-
-        if (device.gatt?.connected) {
-          device.gatt.disconnect();
-        }
-
+        if (device.gatt?.connected) device.gatt.disconnect();
         bluetoothDeviceRef.current = null;
       }
     };
   }, [handleDeviceDisconnected]);
 
-  /*
-   * ---------------------------------------------------------
-   * STATUS
-   * ---------------------------------------------------------
+  /* ---------------------------------------------------------------- *
+   * Derived display state
+   * ---------------------------------------------------------------- */
+
+  const { rmssd, sdnn, pnn50, avgRmssd60s, heartRate, quality, artifactRate } = snapshot;
+
+  /**
+   * What the headline reads.
+   *
+   * The old version reported "STRONG RECOVERY" for anything at or above 40ms,
+   * which meant an artifact-inflated 134ms displayed as excellent recovery in
+   * green — the screen was most confident exactly when it was most wrong.
+   * Nothing is claimed here unless the engine says the data supports it.
    */
+  const status = (() => {
+    if (!connected) return 'AWAITING SIGNAL';
+    if (contactWarning) return 'NO SKIN CONTACT — WET THE STRAP';
+    if (quality === 'poor') return 'SIGNAL POOR — ADJUST STRAP, SIT STILL';
+    if (rmssd === null) return 'ACQUIRING CLEAN BEATS...';
+    if (rmssd < 20) return 'LOW HRV — ELEVATED STRESS';
+    if (rmssd < 40) return 'NOMINAL';
+    return 'STRONG RECOVERY';
+  })();
 
-  const status = rmssd === null ? 'AWAITING SIGNAL' : rmssd < 20 ? 'LOW HRV — ELEVATED STRESS' : rmssd < 40 ? 'NOMINAL' : 'STRONG RECOVERY';
+  const statusClass = (() => {
+    if (!connected || rmssd === null) return 'tk-yellow';
+    if (contactWarning || quality === 'poor') return 'tk-red';
+    if (rmssd < 20) return 'tk-red';
+    if (rmssd < 40) return 'tk-yellow';
+    return 'tk-green';
+  })();
 
-  const statusClass = rmssd === null ? 'tk-yellow' : rmssd < 20 ? 'tk-red' : rmssd < 40 ? 'tk-yellow' : 'tk-green';
+  const num = (value: number | null, digits = 1) => (value !== null ? value.toFixed(digits) : '--');
+  const artifactsTouched = snapshot.beatsCorrected + snapshot.beatsRejected;
 
-  /*
-   * ---------------------------------------------------------
-   * RENDER
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------- *
+   * Render
+   * ---------------------------------------------------------------- */
 
   return (
     <main className="hrv-live">
-      {/* Header */}
-
       <div className="terminal-header">
         <div>HRV.LIVE // BIOMETRIC FEED</div>
 
@@ -575,31 +654,32 @@ export default function HrvLivePage() {
           </b>
         </div>
 
-        <div>SYS_VER: 1.4.0 &nbsp;&nbsp; ACCESS: FREE</div>
+        <div>SYS_VER: 2.0.0 &nbsp;&nbsp; ACCESS: FREE</div>
       </div>
-
-      {/* Ticker */}
 
       <div className="ticker-tape">
         <div className="ticker-tape-inner">
           HR &lt;GO&gt; <span className="tk-white">{heartRate ?? '--'} BPM</span>
-          &nbsp;|&nbsp; RMSSD &lt;GO&gt; <span className="tk-white">{rmssd !== null ? rmssd.toFixed(1) : '--'} MS</span>
-          &nbsp;|&nbsp; SDNN &lt;GO&gt; <span className="tk-cyan">{sdnn !== null ? sdnn.toFixed(1) : '--'} MS</span>
-          &nbsp;|&nbsp; pNN50 &lt;GO&gt; <span className="tk-cyan">{pnn50 !== null ? pnn50.toFixed(1) : '--'} %</span>
+          &nbsp;|&nbsp; RMSSD &lt;GO&gt; <span className="tk-white">{num(rmssd)} MS</span>
+          &nbsp;|&nbsp; SDNN &lt;GO&gt; <span className="tk-cyan">{num(sdnn)} MS</span>
+          &nbsp;|&nbsp; pNN50 &lt;GO&gt; <span className="tk-cyan">{num(pnn50)} %</span>
+          &nbsp;|&nbsp; SIGNAL &lt;GO&gt; <span className={QUALITY_CLASS[quality]}>{QUALITY_LABEL[quality]}</span>
           &nbsp;|&nbsp; STATUS &lt;GO&gt; <span className={statusClass}>{status}</span>
           &nbsp;|&nbsp; HR &lt;GO&gt; <span className="tk-white">{heartRate ?? '--'} BPM</span>
-          &nbsp;|&nbsp; RMSSD &lt;GO&gt; <span className="tk-white">{rmssd !== null ? rmssd.toFixed(1) : '--'} MS</span>
-          &nbsp;|&nbsp; SDNN &lt;GO&gt; <span className="tk-cyan">{sdnn !== null ? sdnn.toFixed(1) : '--'} MS</span>
-          &nbsp;|&nbsp; pNN50 &lt;GO&gt; <span className="tk-cyan">{pnn50 !== null ? pnn50.toFixed(1) : '--'} %</span>
+          &nbsp;|&nbsp; RMSSD &lt;GO&gt; <span className="tk-white">{num(rmssd)} MS</span>
+          &nbsp;|&nbsp; SDNN &lt;GO&gt; <span className="tk-cyan">{num(sdnn)} MS</span>
+          &nbsp;|&nbsp; pNN50 &lt;GO&gt; <span className="tk-cyan">{num(pnn50)} %</span>
         </div>
       </div>
 
-      {/* Workspace */}
+      {errorMessage ? (
+        <div className="log-line tk-red" style={{ padding: '4px 10px' }}>
+          {errorMessage}
+        </div>
+      ) : null}
 
       <div className="workspace-scroll">
         <div className="workspace">
-          {/* Source Vector */}
-
           <div className="panel vector-box">
             <div className="panel-title">SOURCE VECTOR</div>
 
@@ -616,9 +696,15 @@ export default function HrvLivePage() {
             <div className={`alert-text ${connected ? 'vector-connected' : 'vector-offline'}`}>
               {connected ? deviceName : 'CONNECT POLAR H10'}
             </div>
-          </div>
 
-          {/* Main Data Panel */}
+            {connected ? (
+              <div className="log-line" style={{ marginTop: 10, textAlign: 'center' }}>
+                SIGNAL <span className={QUALITY_CLASS[quality]}>{QUALITY_LABEL[quality]}</span>
+                <br />
+                {artifactsTouched} / {snapshot.beatsSeen} BEATS FILTERED
+              </div>
+            ) : null}
+          </div>
 
           <div className="panel">
             <div className="panel-title">HRV LIVE MARKET DATA FEED</div>
@@ -626,79 +712,80 @@ export default function HrvLivePage() {
             <div className="ticker-grid">
               <div className="gauge-block">
                 <div className="gauge-label">HEART RATE</div>
-
                 <div className="gauge-value">[ {heartRate ?? '--'} ]</div>
-
                 <div className="gauge-label">BPM</div>
               </div>
 
               <div className="gauge-block">
                 <div className="gauge-label">HRV (RMSSD)</div>
-
                 <div className="gauge-value">[{rmssd !== null ? ` ${rmssd.toFixed(1)} ` : ' -- '}]</div>
-
-                <div className="gauge-label">MILLISECONDS</div>
+                <div className="gauge-label">{rmssd !== null ? 'MILLISECONDS' : quality === 'poor' ? 'SIGNAL TOO NOISY' : 'ACQUIRING'}</div>
               </div>
             </div>
-
-            {/* Watchlist */}
 
             <div className="watchlist">
               <div className="wl-row">
                 <span className="wl-label">SDNN</span>
-
                 <span className="wl-val tk-cyan">{sdnn !== null ? `${sdnn.toFixed(1)} ms` : '-- ms'}</span>
               </div>
 
               <div className="wl-row">
                 <span className="wl-label">pNN50</span>
-
                 <span className="wl-val tk-cyan">{pnn50 !== null ? `${pnn50.toFixed(1)} %` : '-- %'}</span>
               </div>
 
               <div className="wl-row">
                 <span className="wl-label">1MIN AVG RMSSD</span>
-
-                <span className="wl-val tk-yellow">{avgRmssd !== null ? `${avgRmssd.toFixed(1)} ms` : '-- ms'}</span>
+                <span className="wl-val tk-yellow">{avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}</span>
               </div>
 
               <div className="wl-row">
                 <span className="wl-label">DELTA vs PREV</span>
-
                 <span className={`wl-val ${delta === null ? '' : delta >= 0 ? 'tk-green' : 'tk-red'}`}>
                   {delta !== null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ms` : '-- ms'}
                 </span>
               </div>
-            </div>
 
-            {/* Graph */}
+              <div className="wl-row">
+                <span className="wl-label">SIGNAL QUALITY</span>
+                <span className={`wl-val ${QUALITY_CLASS[quality]}`}>
+                  {QUALITY_LABEL[quality]} · {(artifactRate * 100).toFixed(1)}% FILTERED
+                </span>
+              </div>
+
+              <div className="wl-row">
+                <span className="wl-label">CLEAN INTERVALS</span>
+                <span className="wl-val tk-cyan">
+                  {snapshot.validDiffs} / {snapshot.windowSize}
+                </span>
+              </div>
+            </div>
 
             <div className="graph-area">
               <canvas ref={canvasRef} />
             </div>
           </div>
 
-          {/* RR History */}
-
           <div className="panel ledger-box">
             <div className="panel-title">RR INTERVAL HISTORY LOG</div>
 
             <div className="log-stream">
-              {logs.length === 1 && logs[0].rr === 0 ? (
+              {logs.length === 0 ? (
                 <>
                   <div className="log-line">SYSTEM STATUS: IDLE...</div>
-
                   <div className="log-line">PORT SCAN OPEN: WEB_BLUETOOTH CHANNELS READY</div>
-
-                  <div className="log-line">AWAITING POLAR ENCRYPTED PACKETS...</div>
+                  <div className="log-line">ARTIFACT FILTER: ARMED</div>
+                  <div className="log-line">AWAITING POLAR PACKETS...</div>
                 </>
               ) : (
-                logs.map((log, index) => (
-                  <div className="log-line" key={`${log.timestamp}-${index}`}>
+                logs.map((log) => (
+                  <div className="log-line" key={log.id}>
                     <span>{log.timestamp}</span>
-                    RR=
-                    {log.rr}
-                    ms
+                    <span className={STATUS_CLASS[log.status]}>
+                      {STATUS_MARK[log.status]} RR={log.raw}ms
+                      {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
+                    </span>
+                    {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
                     {log.demo ? ' (demo)' : ''}
                   </div>
                 ))
@@ -707,8 +794,6 @@ export default function HrvLivePage() {
           </div>
         </div>
       </div>
-
-      {/* Control Dock */}
 
       <div className="control-dock">
         <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
@@ -725,15 +810,13 @@ export default function HrvLivePage() {
           readOnly
           value={
             demoMode
-              ? 'COMMAND >> /ANALYZE /TREND=DEMO /DEVICE=SIMULATED_PREVIEW'
+              ? 'COMMAND >> /ANALYZE /TREND=DEMO /FILTER=ON /DEVICE=SIMULATED_PREVIEW'
               : connected
-                ? `COMMAND >> /ANALYZE /TREND=LIVE /DEVICE=${deviceName.toUpperCase()}`
+                ? `COMMAND >> /ANALYZE /TREND=LIVE /FILTER=ON /DEVICE=${deviceName.toUpperCase()}`
                 : 'COMMAND >> /ANALYZE /TREND=REALTIME /DEVICE=PENDING...'
           }
         />
       </div>
-
-      {/* Function Keys */}
 
       <div className="fkey-bar">
         {[
@@ -748,7 +831,6 @@ export default function HrvLivePage() {
         ].map(([key, label]) => (
           <div className="fkey" key={key}>
             <span className="fkey-num">{key}</span>
-
             {label}
           </div>
         ))}
