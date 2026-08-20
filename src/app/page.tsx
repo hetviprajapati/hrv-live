@@ -364,8 +364,22 @@ export default function HrvLivePage() {
         return;
       }
 
-      for (const rr of measurement.rrIntervals) {
-        ingestBeat(rr, now, false);
+      /*
+       * Give every beat its OWN timestamp.
+       *
+       * The intervals themselves say when each beat happened. The last one
+       * ended at `now`; the one before it ended one interval earlier; and so
+       * on. Walking backwards from the packet's arrival reconstructs the true
+       * beat times, which are then strictly increasing and unique.
+       */
+      const intervals = measurement.rrIntervals;
+      const spanMs = intervals.reduce((sum, rr) => sum + rr, 0);
+
+      let beatAt = now - spanMs;
+
+      for (const rr of intervals) {
+        beatAt += rr;
+        ingestBeat(rr, beatAt, false);
       }
     },
     [applyPendingResolution, ingestBeat],
@@ -882,29 +896,17 @@ export default function HrvLivePage() {
                   <div className="log-line">AWAITING POLAR PACKETS...</div>
                 </>
               ) : (
-                Array.from({ length: VISIBLE_LOG_ROWS }, (_, slot) => {
-                  const log = logs[slot];
-
-                  if (!log) {
-                    return (
-                      <div className="log-line" key={`slot-${slot}`}>
-                        &nbsp;
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="log-line" key={`slot-${slot}`}>
-                      <span>{log.timestamp}</span>
-                      <span className={STATUS_CLASS[log.status]}>
-                        {STATUS_MARK[log.status]} RR={log.raw}ms
-                        {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
-                      </span>
-                      {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
-                      {log.demo ? ' (demo)' : ''}
-                    </div>
-                  );
-                })
+                logs.slice(0, VISIBLE_LOG_ROWS).map((log) => (
+                  <div className="log-line" key={log.id}>
+                    <span>{log.timestamp}</span>
+                    <span className={STATUS_CLASS[log.status]}>
+                      {STATUS_MARK[log.status]} RR={log.raw}ms
+                      {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
+                    </span>
+                    {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
+                    {log.demo ? ' (demo)' : ''}
+                  </div>
+                ))
               )}
             </div>
           </div>

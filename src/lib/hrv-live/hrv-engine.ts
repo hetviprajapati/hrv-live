@@ -291,7 +291,7 @@ export const DEFAULT_CONFIG: HrvEngineConfig = {
   minRrMs: 300,
   maxRrMs: 2000,
 
-  stuckRepeatLimit: 3,
+  stuckRepeatLimit: 5,
 
   // Short, because an artifact inside the warm-up window poisons the baseline
   // that everything afterwards is judged against. Three beats is the minimum
