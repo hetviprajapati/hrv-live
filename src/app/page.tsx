@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './page.css';
 import {
+  DEFAULT_CONFIG,
   HrvEngine,
   parseHeartRateMeasurement,
   type CorrectionKind,
@@ -10,6 +11,7 @@ import {
   type PendingResolution,
   type SignalQuality,
 } from '@/lib/hrv-live/hrv-engine';
+import { SessionRecorder, downloadRecording } from '@/lib/hrv-live/session-recorder';
 
 /* ------------------------------------------------------------------ *
  * Types
@@ -52,6 +54,8 @@ const EMPTY_SNAPSHOT: HrvSnapshot = {
  * packets were lost, and the beats either side of the hole are not successive.
  */
 const PACKET_GAP_MS = 2500;
+
+const APP_VERSION = '2.1.0';
 
 const MAX_LOG_ROWS = 40;
 const MAX_TRACE_POINTS = 60;
@@ -100,6 +104,8 @@ function correctionNote(event: { correction: CorrectionKind }): string {
       return 'EXTRA DETECTION — MERGED';
     case 'out-of-range':
       return 'OUTSIDE PHYSIOLOGICAL RANGE';
+    case 'sensor-stuck':
+      return 'SENSOR REPEATING — VALUE FROZEN';
     case 'unrepairable':
       return 'NOISE — DISCARDED';
     default:
@@ -128,6 +134,7 @@ function niceCeiling(value: number): number {
 
 export default function HrvLivePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const logStreamRef = useRef<HTMLDivElement>(null);
   const simulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bluetoothDeviceRef = useRef<any | null>(null);
   const characteristicRef = useRef<any | null>(null);
@@ -137,6 +144,13 @@ export default function HrvLivePage() {
    * engine reports — it does no arithmetic on RR intervals of its own.
    */
   const engineRef = useRef<HrvEngine>(new HrvEngine());
+
+  /**
+   * Records the whole session so it can be replayed offline. Always on — a
+   * user who has just watched the number misbehave should not have to
+   * reproduce it with recording enabled.
+   */
+  const recorderRef = useRef<SessionRecorder>(new SessionRecorder());
   const lastPacketAtRef = useRef<number | null>(null);
   const logIdRef = useRef(0);
   const lastRmssdRef = useRef<number | null>(null);
@@ -146,6 +160,8 @@ export default function HrvLivePage() {
   const [deviceName, setDeviceName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [contactWarning, setContactWarning] = useState(false);
+  const [exportNote, setExportNote] = useState('');
+  const [recordedBeats, setRecordedBeats] = useState(0);
 
   const [snapshot, setSnapshot] = useState<HrvSnapshot>(EMPTY_SNAPSHOT);
   const [delta, setDelta] = useState<number | null>(null);
@@ -174,6 +190,8 @@ export default function HrvLivePage() {
     setTraceData([]);
     setLogs([]);
     setContactWarning(false);
+    setExportNote('');
+    setRecordedBeats(0);
   }, []);
 
   const teardownConnection = useCallback(() => {
@@ -237,6 +255,7 @@ export default function HrvLivePage() {
 
   const publish = useCallback((now: number) => {
     const next = engineRef.current.snapshot(now);
+    recorderRef.current.addSample(next, now);
     setSnapshot(next);
 
     if (next.rmssd !== null) {
@@ -251,6 +270,9 @@ export default function HrvLivePage() {
   const ingestBeat = useCallback(
     (rawRr: number, now: number, demo: boolean) => {
       const event = engineRef.current.push(rawRr, now);
+      recorderRef.current.addBeat(event, now);
+      setRecordedBeats(recorderRef.current.beatCount);
+
       const stamp = formatTimestamp(new Date(now));
       const rounded = Math.round(rawRr);
 
@@ -325,11 +347,15 @@ export default function HrvLivePage() {
       // five-second holes; without this the beats either side of one get
       // treated as consecutive.
       const lastPacketAt = lastPacketAtRef.current;
-      if (lastPacketAt !== null && now - lastPacketAt > PACKET_GAP_MS) {
+      const gapDetected = lastPacketAt !== null && now - lastPacketAt > PACKET_GAP_MS;
+
+      if (gapDetected) {
         const resolution = engineRef.current.markGap();
         if (resolution) applyPendingResolution(resolution);
       }
       lastPacketAtRef.current = now;
+
+      recorderRef.current.addPacket(view, measurement.bpm, measurement.rrIntervals, measurement.sensorContact, gapDetected, now);
 
       if (measurement.rrIntervals.length === 0) {
         // Heart rate without RR data — nothing to feed the engine, but the
@@ -378,9 +404,12 @@ export default function HrvLivePage() {
       characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
       characteristicRef.current = characteristic;
 
+      const name = device.name || 'POLAR DEVICE';
+      recorderRef.current.start('live', name, Date.now());
+
       setConnected(true);
       setDemoMode(false);
-      setDeviceName(device.name || 'POLAR DEVICE');
+      setDeviceName(name);
     } catch (error) {
       console.error(error);
 
@@ -473,6 +502,7 @@ export default function HrvLivePage() {
 
     resetSession();
     demoStateRef.current = { phase: 0, beatsUntilArtifact: 25 };
+    recorderRef.current.start('demo', 'SIMULATED DEVICE', Date.now());
 
     setDemoMode(true);
     setConnected(true);
@@ -481,6 +511,37 @@ export default function HrvLivePage() {
 
     simulationRef.current = setInterval(pushSimulatedReading, 900);
   };
+
+  /* ---------------------------------------------------------------- *
+   * Session export
+   *
+   * This is the diagnostic loop. "It freezes up a bit" is a symptom; this
+   * turns it into a file that can be replayed beat for beat offline, against
+   * any filter setting, without needing the device in hand.
+   * ---------------------------------------------------------------- */
+
+  const exportRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+
+    if (recorder.isEmpty) {
+      setExportNote('NOTHING RECORDED YET — CONNECT AND WEAR THE STRAP FIRST');
+      return;
+    }
+
+    try {
+      const recording = recorder.build(APP_VERSION, DEFAULT_CONFIG, Date.now());
+      const filename = downloadRecording(recording);
+
+      setExportNote(
+        `SAVED ${filename} — ${recording.summary.beats} BEATS, ` +
+          `${Math.round(recording.durationMs / 1000)}s, ` +
+          `${recording.summary.corrected} CORRECTED, ${recording.summary.rejected} REJECTED`,
+      );
+    } catch (error) {
+      console.error(error);
+      setExportNote('EXPORT FAILED — SEE BROWSER CONSOLE');
+    }
+  }, []);
 
   /* ---------------------------------------------------------------- *
    * Chart
@@ -642,6 +703,10 @@ export default function HrvLivePage() {
    * Render
    * ---------------------------------------------------------------- */
 
+  useEffect(() => {
+    if (logStreamRef.current) logStreamRef.current.scrollTop = 0;
+  }, [logs]);
+
   return (
     <main className="hrv-live">
       <div className="terminal-header">
@@ -678,6 +743,12 @@ export default function HrvLivePage() {
         </div>
       ) : null}
 
+      {exportNote ? (
+        <div className="log-line tk-green" style={{ padding: '4px 10px' }}>
+          {exportNote}
+        </div>
+      ) : null}
+
       <div className="workspace-scroll">
         <div className="workspace">
           <div className="panel vector-box">
@@ -702,6 +773,8 @@ export default function HrvLivePage() {
                 SIGNAL <span className={QUALITY_CLASS[quality]}>{QUALITY_LABEL[quality]}</span>
                 <br />
                 {artifactsTouched} / {snapshot.beatsSeen} BEATS FILTERED
+                <br />
+                <span className="tk-red">REC</span> {recordedBeats.toLocaleString()} LOGGED
               </div>
             ) : null}
           </div>
@@ -769,7 +842,7 @@ export default function HrvLivePage() {
           <div className="panel ledger-box">
             <div className="panel-title">RR INTERVAL HISTORY LOG</div>
 
-            <div className="log-stream">
+            <div className="log-stream" ref={logStreamRef}>
               {logs.length === 0 ? (
                 <>
                   <div className="log-line">SYSTEM STATUS: IDLE...</div>
@@ -804,6 +877,15 @@ export default function HrvLivePage() {
           {demoMode ? '■ Stop Demo' : '▶ Preview Demo Data'}
         </button>
 
+        <button
+          className="action-btn"
+          onClick={exportRecording}
+          disabled={recordedBeats === 0}
+          title="Download this session as a file you can send for analysis"
+        >
+          ⤓ SAVE SESSION LOG{recordedBeats > 0 ? ` (${recordedBeats.toLocaleString()})` : ''}
+        </button>
+
         <input
           type="text"
           className="cmd-line"
@@ -819,17 +901,34 @@ export default function HrvLivePage() {
       </div>
 
       <div className="fkey-bar">
-        {[
-          ['F1', 'HELP'],
-          ['F2', 'ANALYZE'],
-          ['F3', 'ALERT SET'],
-          ['F4', 'TREND'],
-          ['F5', 'LOG EXPORT'],
-          ['F6', 'GLUCOSELIVE'],
-          ['F7', 'SETTINGS'],
-          ['F8', 'PRO UPGRADE'],
-        ].map(([key, label]) => (
-          <div className="fkey" key={key}>
+        {(
+          [
+            ['F1', 'HELP', null],
+            ['F2', 'ANALYZE', null],
+            ['F3', 'ALERT SET', null],
+            ['F4', 'TREND', null],
+            ['F5', 'LOG EXPORT', exportRecording],
+            ['F6', 'GLUCOSELIVE', null],
+            ['F7', 'SETTINGS', null],
+            ['F8', 'PRO UPGRADE', null],
+          ] as [string, string, (() => void) | null][]
+        ).map(([key, label, action]) => (
+          <div
+            className="fkey"
+            key={key}
+            onClick={action ?? undefined}
+            role={action ? 'button' : undefined}
+            tabIndex={action ? 0 : undefined}
+            onKeyDown={
+              action
+                ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') action();
+                  }
+                : undefined
+            }
+            style={action ? { cursor: 'pointer' } : undefined}
+            title={action ? 'Download this session as a file you can send for analysis' : undefined}
+          >
             <span className="fkey-num">{key}</span>
             {label}
           </div>

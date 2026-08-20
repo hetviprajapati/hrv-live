@@ -206,6 +206,12 @@
   flex-grow: 1;
   line-height: 1.5;
 }
+.log-stream {
+  overflow-anchor: none;
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+}
 .log-line {
   border-bottom: 1px dotted #111;
   padding: 2px 0;

@@ -128,6 +128,7 @@ export type CorrectionKind =
   | 'missed-beat' // one interval spanning two real beats
   | 'extra-beat' // two intervals that are really one beat
   | 'out-of-range' // outside physiological limits
+  | 'sensor-stuck' // identical value repeated — the strap stopped updating
   | 'unrepairable'; // flagged, no coherent reconstruction available
 
 export type SignalQuality = 'acquiring' | 'excellent' | 'good' | 'fair' | 'poor';
@@ -223,6 +224,28 @@ export interface HrvEngineConfig {
   minRrMs: number;
   maxRrMs: number;
 
+  /**
+   * How many identical consecutive raw values before the sensor is treated as
+   * stuck. Set to 0 to disable.
+   *
+   * A Polar H10 reports intervals in units of 1/1024 s, so two consecutive
+   * beats landing on the exact same value is uncommon but real; three in a row
+   * is not physiology, it is a strap that has stopped updating and is repeating
+   * its last reading.
+   *
+   * The first two of a run are kept. The third and everything after it is
+   * discarded with a chain break.
+   *
+   * A caveat worth knowing: discarding repeats removes zero-differences, which
+   * are the SMALLEST possible contributions to RMSSD, so an over-eager setting
+   * here biases the reading UPWARD. That is the opposite of the artifact
+   * problem and just as dishonest. Three is deliberately conservative, and
+   * every discarded repeat also counts toward the artifact rate, so a genuinely
+   * frozen sensor degrades signal quality and suppresses the number rather than
+   * quietly inflating it.
+   */
+  stuckRepeatLimit: number;
+
   /** Beats accepted unconditionally at session start, before stats exist. */
   warmupBeats: number;
   /** Beats used for the local level estimate. Short, so it tracks HR drift. */
@@ -267,6 +290,8 @@ export const DEFAULT_CONFIG: HrvEngineConfig = {
 
   minRrMs: 300,
   maxRrMs: 2000,
+
+  stuckRepeatLimit: 3,
 
   // Short, because an artifact inside the warm-up window poisons the baseline
   // that everything afterwards is judged against. Three beats is the minimum
@@ -317,6 +342,10 @@ export class HrvEngine {
 
   private lastCleanRr: number | null = null;
 
+  /** Last raw value off the sensor, and how many times it has repeated. */
+  private lastRawRr: number | null = null;
+  private rawRepeatRun = 0;
+
   /**
    * Beats still to be accepted unconditionally while a baseline is
    * established. Non-zero at session start and again after any gap.
@@ -356,6 +385,8 @@ export class HrvEngine {
     this.pending = null;
     this.breakNext = false;
     this.lastCleanRr = null;
+    this.lastRawRr = null;
+    this.rawRepeatRun = 0;
     this.recentArtifacts = [];
     this.rmssdSeries = [];
     this.beatsSeen = 0;
@@ -387,6 +418,8 @@ export class HrvEngine {
     this.breakNext = true;
     this.levels = [];
     this.warmupRemaining = this.cfg.warmupBeats;
+    this.lastRawRr = null;
+    this.rawRepeatRun = 0;
 
     return this.pendingResolution;
   }
@@ -417,6 +450,29 @@ export class HrvEngine {
         raw: rawRr,
         disposition: 'rejected',
         correction: 'out-of-range',
+        emitted: [],
+        threshold,
+        localMedian,
+        pendingResolution: this.pendingResolution,
+      };
+    }
+
+    // Stage 1b — a sensor that has stopped updating.
+    // Tracked on the RAW value, because a frozen strap repeats what it last
+    // transmitted, whatever the filter did with it downstream.
+    this.rawRepeatRun = rawRr === this.lastRawRr ? this.rawRepeatRun + 1 : 1;
+    this.lastRawRr = rawRr;
+
+    if (this.cfg.stuckRepeatLimit > 0 && this.rawRepeatRun >= this.cfg.stuckRepeatLimit) {
+      this.discardPending();
+      this.recordArtifact();
+      this.beatsRejected += 1;
+      this.breakNext = true;
+
+      return {
+        raw: rawRr,
+        disposition: 'rejected',
+        correction: 'sensor-stuck',
         emitted: [],
         threshold,
         localMedian,
