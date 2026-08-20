@@ -54,7 +54,7 @@ const EMPTY_SNAPSHOT: HrvSnapshot = {
  * packets were lost, and the beats either side of the hole are not successive.
  */
 const PACKET_GAP_MS = 2500;
-
+const BEAT_CLOCK_RESYNC_MS = 1500;
 const APP_VERSION = '2.1.0';
 
 const MAX_LOG_ROWS = 40;
@@ -152,6 +152,7 @@ export default function HrvLivePage() {
    */
   const recorderRef = useRef<SessionRecorder>(new SessionRecorder());
   const lastPacketAtRef = useRef<number | null>(null);
+  const beatClockRef = useRef<number | null>(null);
   const logIdRef = useRef(0);
   const lastRmssdRef = useRef<number | null>(null);
 
@@ -183,6 +184,7 @@ export default function HrvLivePage() {
   const resetSession = useCallback(() => {
     engineRef.current.reset();
     lastPacketAtRef.current = null;
+    beatClockRef.current = null;
     lastRmssdRef.current = null;
 
     setSnapshot(EMPTY_SNAPSHOT);
@@ -350,6 +352,7 @@ export default function HrvLivePage() {
       const gapDetected = lastPacketAt !== null && now - lastPacketAt > PACKET_GAP_MS;
 
       if (gapDetected) {
+        beatClockRef.current = null;
         const resolution = engineRef.current.markGap();
         if (resolution) applyPendingResolution(resolution);
       }
@@ -375,12 +378,23 @@ export default function HrvLivePage() {
       const intervals = measurement.rrIntervals;
       const spanMs = intervals.reduce((sum, rr) => sum + rr, 0);
 
-      let beatAt = now - spanMs;
+      const clock = beatClockRef.current;
+      let beatAt: number;
+
+      if (clock === null) {
+        beatAt = now - spanMs;
+      } else if (Math.abs(clock + spanMs - now) > BEAT_CLOCK_RESYNC_MS) {
+        beatAt = Math.max(now - spanMs, clock); // re-anchor, never rewind
+      } else {
+        beatAt = clock;
+      }
 
       for (const rr of intervals) {
         beatAt += rr;
         ingestBeat(rr, beatAt, false);
       }
+
+      beatClockRef.current = beatAt;
     },
     [applyPendingResolution, ingestBeat],
   );
