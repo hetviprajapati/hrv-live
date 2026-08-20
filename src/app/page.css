@@ -47,7 +47,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+  /* -webkit-overflow-scrolling: touch; */
   align-content: center;
 }
 .terminal-header {
@@ -73,7 +73,7 @@
   width: 100%;
   overflow-x: auto;
   overflow-y: visible;
-  -webkit-overflow-scrolling: touch;
+  /* -webkit-overflow-scrolling: touch; */
 }
 
 .panel {
