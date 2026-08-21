@@ -276,51 +276,31 @@ export default function HrvLivePage() {
     resetSession();
   }, [resetSession]);
 
-  // const handleDeviceDisconnected = useCallback(
-  //   (event?: Event) => {
-  //     console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
+  const handleDeviceDisconnected = useCallback(
+    (event?: Event) => {
+      console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
 
-  //     console.error('[Polar] Device:', bluetoothDeviceRef.current?.name);
+      console.error('[Polar] Device:', bluetoothDeviceRef.current?.name);
 
-  //     console.error('[Polar] GATT connected:', bluetoothDeviceRef.current?.gatt?.connected);
+      console.error('[Polar] GATT connected:', bluetoothDeviceRef.current?.gatt?.connected);
 
-  //     const device = (event?.target as any) ?? bluetoothDeviceRef.current;
+      const device = (event?.target as any) ?? bluetoothDeviceRef.current;
 
-  //     if (device) {
-  //       device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-  //     }
+      if (device) {
+        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+      }
 
-  //     bluetoothDeviceRef.current = null;
-  //     characteristicRef.current = null;
-  //     pmdControlRef.current = null;
-  //     pmdDataRef.current = null;
-  //     lastPpiPacketAtRef.current = null;
+      bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
 
-  //     teardownConnection();
-  //     setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
-  //   },
-  //   [teardownConnection],
-  // );
-
-  const handleDeviceDisconnected = useCallback((event?: Event) => {
-    const device = (event?.target as any) ?? bluetoothDeviceRef.current;
-
-    console.error('[Polar] GATT DISCONNECTED', {
-      time: new Date().toISOString(),
-      deviceName: device?.name,
-      deviceId: device?.id,
-      gattConnected: device?.gatt?.connected,
-    });
-
-    console.trace('[Polar] GATT disconnect stack');
-
-    // Do NOT immediately clear the refs or reset the session here.
-    // We want to inspect whether Chrome is actually dropping the
-    // connection or our application is triggering cleanup.
-
-    setConnected(false);
-    setErrorMessage('DEVICE DISCONNECTED — CHECK CONSOLE');
-  }, []);
+      teardownConnection();
+      setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
+    },
+    [teardownConnection],
+  );
 
   /* ---------------------------------------------------------------- *
    * Beat handling
@@ -800,6 +780,7 @@ export default function HrvLivePage() {
         setErrorMessage('');
       }
     } catch (error) {
+      console.log('==Catch error', error);
       console.error(error);
 
       const device = bluetoothDeviceRef.current;
