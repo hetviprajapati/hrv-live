@@ -34,7 +34,11 @@ export const RECORDING_VERSION = 1;
 export interface RecordedPacket {
   /** Milliseconds since session start. */
   t: number;
-  /** Raw characteristic bytes, space-separated hex. The ground truth. */
+  /**
+   * Raw characteristic bytes, space-separated hex. The ground truth.
+   * For Verity Sense this may be a Polar PMD/PPI packet rather than the
+   * standard Heart Rate Measurement characteristic.
+   */
   hex: string;
   bpm: number;
   /** Parsed RR intervals, milliseconds. */

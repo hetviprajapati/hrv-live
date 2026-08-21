@@ -130,6 +130,73 @@ function niceCeiling(value: number): number {
 }
 
 /* ------------------------------------------------------------------ *
+ * Polar Verity Sense / PMD
+ * ------------------------------------------------------------------ */
+
+const POLAR_PMD_SERVICE_UUID = 'fb005c80-02e7-f387-1cad-8acd2d8df0c8';
+const POLAR_PMD_CONTROL_UUID = 'fb005c81-02e7-f387-1cad-8acd2d8df0c8';
+const POLAR_PMD_DATA_UUID = 'fb005c82-02e7-f387-1cad-8acd2d8df0c8';
+
+const PMD_GET_MEASUREMENT_SETTINGS = 0x01;
+const PMD_REQUEST_MEASUREMENT_START = 0x02;
+const PMD_MEASUREMENT_PPI = 0x03;
+
+type PpiSample = {
+  heartRate: number;
+  ppIntervalMs: number;
+  errorEstimate: number;
+  blocker: boolean;
+  skinContact: boolean;
+  skinContactSupported: boolean;
+};
+
+function isVeritySenseDevice(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return normalized.includes('verity sense') || normalized.includes('polar sense');
+}
+
+/**
+ * Polar PMD PPI frames:
+ *   byte 0      measurement type (0x03 = PPI)
+ *   bytes 1..8  device timestamp
+ *   byte 9      frame type (0 = normal PPI frame)
+ *   byte 10..   repeated 6-byte PPI samples
+ *
+ * Each PPI sample:
+ *   byte 0      HR
+ *   bytes 1..2  pulse-to-pulse interval in ms, little-endian
+ *   bytes 3..4  error estimate
+ *   byte 5      blocker / skin-contact flags
+ */
+function parsePpiMeasurement(view: DataView): PpiSample[] {
+  if (view.byteLength < 16) return [];
+  if (view.getUint8(0) !== PMD_MEASUREMENT_PPI) return [];
+
+  const frameType = view.getUint8(9) & 0x7f;
+  if (frameType !== 0) return [];
+
+  const contentLength = view.byteLength - 10;
+  if (contentLength < 6 || contentLength % 6 !== 0) return [];
+
+  const samples: PpiSample[] = [];
+
+  for (let offset = 10; offset + 6 <= view.byteLength; offset += 6) {
+    const flags = view.getUint8(offset + 5);
+
+    samples.push({
+      heartRate: view.getUint8(offset),
+      ppIntervalMs: view.getUint16(offset + 1, true),
+      errorEstimate: view.getUint16(offset + 3, true),
+      blocker: (flags & 0x01) !== 0,
+      skinContact: (flags & 0x02) !== 0,
+      skinContactSupported: (flags & 0x04) !== 0,
+    });
+  }
+
+  return samples;
+}
+
+/* ------------------------------------------------------------------ *
  * Page
  * ------------------------------------------------------------------ */
 
@@ -138,6 +205,9 @@ export default function HrvLivePage() {
   const simulationRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const bluetoothDeviceRef = useRef<any | null>(null);
   const characteristicRef = useRef<any | null>(null);
+  const pmdControlRef = useRef<any | null>(null);
+  const pmdDataRef = useRef<any | null>(null);
+  const lastPpiPacketAtRef = useRef<number | null>(null);
 
   /**
    * All signal processing lives here. The component only renders what the
@@ -184,6 +254,7 @@ export default function HrvLivePage() {
   const resetSession = useCallback(() => {
     engineRef.current.reset();
     lastPacketAtRef.current = null;
+    lastPpiPacketAtRef.current = null;
     beatClockRef.current = null;
     lastRmssdRef.current = null;
 
@@ -212,6 +283,9 @@ export default function HrvLivePage() {
 
       bluetoothDeviceRef.current = null;
       characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
 
       teardownConnection();
       setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
@@ -399,6 +473,90 @@ export default function HrvLivePage() {
     [applyPendingResolution, ingestBeat],
   );
 
+  const handlePpiMeasurement = useCallback(
+    (event: Event) => {
+      const view = (event.target as any)?.value as DataView | undefined;
+      if (!view || view.byteLength === 0) return;
+
+      const samples = parsePpiMeasurement(view);
+      if (samples.length === 0) return;
+
+      const now = Date.now();
+      const lastPacketAt = lastPpiPacketAtRef.current;
+      const gapDetected = lastPacketAt !== null && now - lastPacketAt > PACKET_GAP_MS;
+
+      if (gapDetected) {
+        beatClockRef.current = null;
+        const resolution = engineRef.current.markGap();
+        if (resolution) applyPendingResolution(resolution);
+      }
+
+      lastPpiPacketAtRef.current = now;
+
+      const validSamples = samples.filter((sample) => {
+        // Polar explicitly says blocker=1 means movement was detected and the
+        // sample must be discarded. If contact support is present, no-contact
+        // samples must also be discarded.
+        if (sample.blocker) return false;
+        if (sample.skinContactSupported && !sample.skinContact) return false;
+        if (!Number.isFinite(sample.ppIntervalMs)) return false;
+        return sample.ppIntervalMs >= DEFAULT_CONFIG.minRrMs && sample.ppIntervalMs <= DEFAULT_CONFIG.maxRrMs;
+      });
+
+      const hasSupportedContact = samples.some((sample) => sample.skinContactSupported);
+      const hasNoContact = samples.some((sample) => sample.skinContactSupported && !sample.skinContact);
+      setContactWarning(hasSupportedContact && hasNoContact);
+
+      const bpmSamples = validSamples.filter((sample) => sample.heartRate > 0);
+      if (bpmSamples.length > 0) {
+        const averageHr = bpmSamples.reduce((sum, sample) => sum + sample.heartRate, 0) / bpmSamples.length;
+        setSnapshot((current) => ({
+          ...current,
+          heartRate: Math.round(averageHr),
+        }));
+      }
+
+      recorderRef.current.addPacket(
+        view,
+        bpmSamples.length > 0 ? Math.round(bpmSamples.reduce((sum, sample) => sum + sample.heartRate, 0) / bpmSamples.length) : 0,
+        samples.map((sample) => sample.ppIntervalMs),
+        hasNoContact ? 'supported-no-contact' : hasSupportedContact ? 'supported-contact' : 'unsupported',
+        gapDetected,
+        now,
+      );
+
+      if (validSamples.length === 0) return;
+
+      /*
+       * PMD can batch several PPI samples into one notification. Reconstruct
+       * the beat times from the pulse intervals just like we do for H10 RR
+       * intervals. The last sample ends at `now`; earlier samples are walked
+       * backwards from there.
+       */
+      const intervals = validSamples.map((sample) => sample.ppIntervalMs);
+      const spanMs = intervals.reduce((sum, pp) => sum + pp, 0);
+
+      const clock = beatClockRef.current;
+      let beatAt: number;
+
+      if (clock === null) {
+        beatAt = now - spanMs;
+      } else if (Math.abs(clock + spanMs - now) > BEAT_CLOCK_RESYNC_MS) {
+        beatAt = Math.max(now - spanMs, clock);
+      } else {
+        beatAt = clock;
+      }
+
+      for (const pp of intervals) {
+        beatAt += pp;
+        ingestBeat(pp, beatAt, false);
+      }
+
+      beatClockRef.current = beatAt;
+    },
+    [applyPendingResolution, ingestBeat],
+  );
+
   /* ---------------------------------------------------------------- *
    * Bluetooth
    * ---------------------------------------------------------------- */
@@ -413,7 +571,10 @@ export default function HrvLivePage() {
 
     try {
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ namePrefix: 'Polar' }, { services: ['heart_rate'] }],
+        // Use the device name for discovery. Verity Sense exposes the standard
+        // heart-rate service, but its HRV/PPI stream lives in Polar PMD.
+        filters: [{ namePrefix: 'Polar' }],
+        optionalServices: ['heart_rate', 'battery_service', 'device_information', POLAR_PMD_SERVICE_UUID],
       });
 
       // Wipe first. Whatever was in the buffers belongs to a different session.
@@ -425,6 +586,11 @@ export default function HrvLivePage() {
       const server = await device.gatt?.connect();
       if (!server) throw new Error('GATT connect failed');
 
+      const name = device.name || 'POLAR DEVICE';
+      const isVerity = isVeritySenseDevice(name);
+
+      // Standard Heart Rate service is still useful on Verity Sense for the
+      // headline HR, and it remains the primary RR source for the H10.
       const service = await server.getPrimaryService('heart_rate');
       const characteristic = await service.getCharacteristic('heart_rate_measurement');
 
@@ -432,26 +598,121 @@ export default function HrvLivePage() {
       characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
       characteristicRef.current = characteristic;
 
-      const name = device.name || 'POLAR DEVICE';
+      // Start recording before enabling PMD so the first PPI notification can
+      // never arrive before the recorder has a session start time.
       recorderRef.current.start('live', name, Date.now());
+
+      if (isVerity) {
+        /*
+         * Verity Sense HRV is PPI, not the H10-style RR field. PPI is streamed
+         * through Polar's proprietary PMD service.
+         *
+         * Sequence:
+         *   1. subscribe to PMD control indications
+         *   2. subscribe to PMD data notifications
+         *   3. ask for PPI settings
+         *   4. start the PPI stream
+         *
+         * Requesting settings before starting the stream is important; Polar's
+         * PMD flow expects this sequence.
+         */
+        const pmdService = await server.getPrimaryService(POLAR_PMD_SERVICE_UUID);
+        const pmdControl = await pmdService.getCharacteristic(POLAR_PMD_CONTROL_UUID);
+        const pmdData = await pmdService.getCharacteristic(POLAR_PMD_DATA_UUID);
+
+        await pmdControl.startNotifications();
+        await pmdData.startNotifications();
+
+        pmdControlRef.current = pmdControl;
+        pmdDataRef.current = pmdData;
+
+        pmdData.addEventListener('characteristicvaluechanged', handlePpiMeasurement);
+
+        // Keep the control-point indication listener installed long enough to
+        // observe the settings response. We do not need to decode the settings
+        // for PPI because the PPI stream uses the device's supported defaults.
+        let settingsResponseReceived = false;
+
+        const handlePmdControl = (event: Event) => {
+          const controlView = (event.target as any)?.value as DataView | undefined;
+          if (!controlView || controlView.byteLength < 2) return;
+
+          const bytes = new Uint8Array(controlView.buffer, controlView.byteOffset, controlView.byteLength);
+
+          // A PMD response is enough to prove that the control point is alive.
+          // Log it without making the UI depend on a particular firmware response.
+          console.debug(
+            '[Verity Sense] PMD control response:',
+            Array.from(bytes)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join(' '),
+          );
+
+          settingsResponseReceived = true;
+        };
+
+        pmdControl.addEventListener('characteristicvaluechanged', handlePmdControl);
+
+        try {
+          await pmdControl.writeValue(new Uint8Array([PMD_GET_MEASUREMENT_SETTINGS, PMD_MEASUREMENT_PPI]));
+
+          // Give the device a short window to return the settings indication.
+          // Some firmware sends it immediately; some takes a BLE round-trip.
+          const settingsDeadline = Date.now() + 1500;
+          while (!settingsResponseReceived && Date.now() < settingsDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+
+          // The PPI stream itself is started with the PMD start command.
+          await pmdControl.writeValue(new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]));
+        } finally {
+          pmdControl.removeEventListener('characteristicvaluechanged', handlePmdControl);
+        }
+      }
 
       setConnected(true);
       setDemoMode(false);
       setDeviceName(name);
+
+      if (isVerity) {
+        setErrorMessage('');
+      }
     } catch (error) {
       console.error(error);
 
       const device = bluetoothDeviceRef.current;
       if (device) device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
 
+      if (characteristicRef.current) {
+        characteristicRef.current.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+      }
+
+      if (pmdDataRef.current) {
+        pmdDataRef.current.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
+      }
+
+      if (device?.gatt?.connected) {
+        try {
+          device.gatt.disconnect();
+        } catch {
+          // Best-effort cleanup; the original connection error is more useful.
+        }
+      }
+
       bluetoothDeviceRef.current = null;
       characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
+      resetSession();
 
       setConnected(false);
       setErrorMessage(
         error instanceof Error && error.name === 'NotFoundError'
           ? 'NO DEVICE SELECTED'
-          : 'CONNECTION FAILED — CHECK THE STRAP IS ON AND NOT PAIRED ELSEWHERE',
+          : error instanceof Error && error.message.includes('Verity Sense')
+            ? error.message
+            : 'CONNECTION FAILED — CHECK THE POLAR DEVICE IS ON, WORN, AND NOT CONNECTED TO ANOTHER APP',
       );
     }
   };
@@ -459,10 +720,16 @@ export default function HrvLivePage() {
   const disconnectPolar = () => {
     const device = bluetoothDeviceRef.current;
     const characteristic = characteristicRef.current;
+    const pmdControl = pmdControlRef.current;
+    const pmdData = pmdDataRef.current;
 
     try {
       if (characteristic) {
         characteristic.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+      }
+
+      if (pmdData) {
+        pmdData.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
       }
 
       if (device) {
@@ -474,6 +741,9 @@ export default function HrvLivePage() {
     } finally {
       bluetoothDeviceRef.current = null;
       characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
       teardownConnection();
     }
   };
@@ -717,11 +987,20 @@ export default function HrvLivePage() {
       }
 
       const device = bluetoothDeviceRef.current;
+      const pmdData = pmdDataRef.current;
+
+      if (pmdData) {
+        pmdData.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
+      }
+
       if (device) {
         device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
         if (device.gatt?.connected) device.gatt.disconnect();
         bluetoothDeviceRef.current = null;
       }
+
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
     };
   }, [handleDeviceDisconnected]);
 
@@ -826,7 +1105,7 @@ export default function HrvLivePage() {
             </svg>
 
             <div className={`alert-text ${connected ? 'vector-connected' : 'vector-offline'}`}>
-              {connected ? deviceName : 'CONNECT POLAR H10'}
+              {connected ? deviceName : 'CONNECT POLAR DEVICE'}
             </div>
 
             {connected ? (

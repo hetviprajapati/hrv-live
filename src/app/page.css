@@ -29,7 +29,7 @@
   color: var(--bbg-green);
   font-weight: bold;
 }
-.ticker-tape-inner .tk-red {
+.tk-red {
   color: var(--red-alert);
   font-weight: bold;
 }

@@ -135,7 +135,13 @@ export type SignalQuality = 'acquiring' | 'excellent' | 'good' | 'fair' | 'poor'
 
 /** One beat as it exists after cleaning, ready for metric calculation. */
 export interface CleanBeat {
-  /** Interval in milliseconds, after any correction. */
+  /**
+   * Interval in milliseconds, after any correction.
+   *
+   * The engine intentionally treats ECG RR and optical PPI the same here:
+   * both are successive cardiac pulse intervals in milliseconds. Device-specific
+   * parsing/quality checks happen before values reach this engine.
+   */
   rr: number;
   disposition: 'accepted' | 'corrected';
   correction: CorrectionKind;
