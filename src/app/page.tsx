@@ -725,12 +725,12 @@ export default function HrvLivePage() {
           /*
            * IMPORTANT:
            *
-           * Use writeValueWithoutResponse() here.
+           * Use writeValue() here.
            *
            * This matches the raw BLE approach shown in Polar's
            * own GitHub discussion for PPI.
            */
-          await pmdControl.writeValueWithoutResponse(ppiStartCommand);
+          await pmdControl.writeValue(ppiStartCommand);
 
           console.debug('[Verity Sense] PPI start command sent successfully');
 
