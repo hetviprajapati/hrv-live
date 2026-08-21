@@ -646,12 +646,13 @@ export default function HrvLivePage() {
         const pmdData = await pmdService.getCharacteristic(POLAR_PMD_DATA_UUID);
 
         console.debug('[Verity Sense] PMD characteristics found');
+        pmdControlRef.current = pmdControl;
+        pmdDataRef.current = pmdData;
 
         /*
-         * Prepare the PMD data path before the control point starts PPI.
+         * PMD DATA
          *
-         * PMD control uses indications.
-         * PMD data uses notifications.
+         * Verity Sense sends PPI measurements here.
          */
         console.debug('[Verity Sense] Enabling PMD data notifications...');
 
@@ -661,20 +662,17 @@ export default function HrvLivePage() {
 
         pmdData.addEventListener('characteristicvaluechanged', handlePpiMeasurement);
 
+        /*
+         * PMD CONTROL
+         *
+         * The control characteristic uses indications.
+         */
         console.debug('[Verity Sense] Enabling PMD control indications...');
 
         await pmdControl.startNotifications();
 
         console.debug('[Verity Sense] PMD control indications enabled');
 
-        pmdControlRef.current = pmdControl;
-        pmdDataRef.current = pmdData;
-
-        /*
-         * Keep this listener installed while we debug the complete PMD
-         * handshake. We want to see BOTH the settings response and the
-         * response to the start command.
-         */
         const handlePmdControl = (event: Event) => {
           const controlView = (event.target as any)?.value as DataView | undefined;
 
@@ -699,52 +697,53 @@ export default function HrvLivePage() {
 
         try {
           /*
-           * STEP 1
-           * Ask Verity Sense what PPI settings it supports.
-           */
-          console.debug('[Verity Sense] Requesting PPI measurement settings...');
-
-          await pmdControl.writeValueWithResponse(new Uint8Array([PMD_GET_MEASUREMENT_SETTINGS, PMD_MEASUREMENT_PPI]));
-
-          console.debug('[Verity Sense] PPI settings command sent successfully');
-
-          console.debug('[Verity Sense] AFTER PPI START:', {
-            gattConnected: device.gatt?.connected,
-            pmdControlConnected: !!pmdControl,
-            pmdDataConnected: !!pmdData,
-          });
-
-          /*
-           * Give the sensor time to send the indication.
-           */
-          await new Promise((resolve) => setTimeout(resolve, 500));
-
-          /*
-           * STEP 2
-           * Start PPI.
+           * ---------------------------------------------------------
+           * PPI START
+           * ---------------------------------------------------------
+           *
+           * IMPORTANT:
+           * PPI does NOT use the stream-settings payload.
+           *
+           * Polar's startPpiStreaming() API takes only the device ID.
+           *
+           * Raw PMD command:
+           *
+           *   0x02 = REQUEST_MEASUREMENT_START
+           *   0x03 = PPI
            */
           console.debug('[Verity Sense] Sending PPI start command...');
 
-          await pmdControl.writeValueWithResponse(new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]));
+          const ppiStartCommand = new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]);
 
-          console.debug('[Verity Sense] PPI start command sent successfully');
-
-          console.debug('[Verity Sense] AFTER PPI START:', {
-            gattConnected: device.gatt?.connected,
-            pmdControlConnected: !!pmdControl,
-            pmdDataConnected: !!pmdData,
-          });
+          console.debug(
+            '[Verity Sense] PPI START COMMAND:',
+            Array.from(ppiStartCommand)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join(' '),
+          );
 
           /*
            * IMPORTANT:
-           * Polar documents that the first PPI data can take roughly
-           * 25 seconds to arrive.
            *
-           * Therefore DON'T treat an immediate absence of PPI packets
-           * as a connection failure.
+           * Use writeValueWithoutResponse() here.
+           *
+           * This matches the raw BLE approach shown in Polar's
+           * own GitHub discussion for PPI.
+           */
+          await pmdControl.writeValueWithoutResponse(ppiStartCommand);
+
+          console.debug('[Verity Sense] PPI start command sent successfully');
+
+          console.debug('[Verity Sense] Connection immediately after PPI start:', device.gatt?.connected);
+
+          /*
+           * PPI has a startup delay.
+           *
+           * Do NOT assume "no PPI data yet" means failure.
+           * We will let the notification listener remain active.
            */
         } catch (error) {
-          console.error('[Verity Sense] PMD/PPI startup failed:', error);
+          console.error('[Verity Sense] PPI startup failed:', error);
 
           throw error;
         }
