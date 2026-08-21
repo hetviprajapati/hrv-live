@@ -58,7 +58,7 @@ const BEAT_CLOCK_RESYNC_MS = 1500;
 const APP_VERSION = '2.1.0';
 
 const MAX_LOG_ROWS = 40;
-const VISIBLE_LOG_ROWS = 18;
+const VISIBLE_LOG_ROWS = 24;
 const MAX_TRACE_POINTS = 60;
 
 /* ------------------------------------------------------------------ *
@@ -731,6 +731,10 @@ export default function HrvLivePage() {
 
   const { rmssd, sdnn, pnn50, avgRmssd60s, heartRate, quality, artifactRate } = snapshot;
 
+  // Keep a fixed set of visible DOM rows. This avoids continuously prepending
+  // and removing DOM nodes, which can cause stale painting on iPadOS/Bluefy.
+  const visibleLogs = Array.from({ length: VISIBLE_LOG_ROWS }, (_, index) => logs[index] ?? null);
+
   /**
    * What the headline reads.
    *
@@ -826,7 +830,7 @@ export default function HrvLivePage() {
             </div>
 
             {connected ? (
-              <div className="log-line" style={{ marginTop: 10, textAlign: 'center' }}>
+              <div className="source-stats">
                 SIGNAL <span className={QUALITY_CLASS[quality]}>{QUALITY_LABEL[quality]}</span>
                 <br />
                 {artifactsTouched} / {snapshot.beatsSeen} BEATS FILTERED
@@ -910,15 +914,19 @@ export default function HrvLivePage() {
                   <div className="log-line">AWAITING POLAR PACKETS...</div>
                 </>
               ) : (
-                logs.slice(0, VISIBLE_LOG_ROWS).map((log) => (
-                  <div className="log-line" key={log.id}>
-                    <span>{log.timestamp}</span>
-                    <span className={STATUS_CLASS[log.status]}>
-                      {STATUS_MARK[log.status]} RR={log.raw}ms
-                      {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
-                    </span>
-                    {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
-                    {log.demo ? ' (demo)' : ''}
+                visibleLogs.map((log, index) => (
+                  <div className="log-line" key={index}>
+                    {log ? (
+                      <>
+                        <span>{log.timestamp}</span>
+                        <span className={STATUS_CLASS[log.status]}>
+                          {STATUS_MARK[log.status]} RR={log.raw}ms
+                          {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
+                        </span>
+                        {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
+                        {log.demo ? ' (demo)' : ''}
+                      </>
+                    ) : null}
                   </div>
                 ))
               )}

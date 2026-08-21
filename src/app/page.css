@@ -195,26 +195,56 @@
   height: 100%;
   display: block;
 }
+.source-stats {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dim-orange);
+}
 
+/*
+ * iPadOS / Bluefy stability:
+ * Keep the ledger as a fixed-height, non-scrolling flex child. The UI already
+ * renders only VISIBLE_LOG_ROWS, so a nested scrolling layer is unnecessary.
+ */
 .ledger-box {
+  height: 485px;
   max-height: 485px;
+  min-height: 0;
+  overflow: hidden;
 }
 .log-stream {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   font-size: 12px;
   color: var(--dim-orange);
-  overflow: auto;
-  flex-grow: 1;
-  line-height: 1.5;
+  line-height: 18px;
 }
+
 .log-line {
+  height: 18px;
+  min-height: 18px;
+  box-sizing: border-box;
   border-bottom: 1px dotted #111;
-  padding: 2px 0;
+  padding: 0;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .log-line span {
   color: #fff;
+  flex: 0 0 auto;
+}
+
+.log-line span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .control-dock {
@@ -333,11 +363,19 @@
   }
 
   .ledger-box {
+    height: 420px;
     max-height: 420px;
+    min-height: 0;
   }
 
   .log-stream {
     font-size: 11px;
+    line-height: 17px;
+  }
+
+  .log-line {
+    height: 17px;
+    min-height: 17px;
   }
 
   .control-dock {
@@ -424,11 +462,19 @@
   }
 
   .ledger-box {
+    height: 300px;
     max-height: 300px;
+    min-height: 0;
   }
 
   .log-stream {
     font-size: 11px;
+    line-height: 17px;
+  }
+
+  .log-line {
+    height: 17px;
+    min-height: 17px;
   }
 
   .control-dock {
@@ -515,11 +561,19 @@
   }
 
   .ledger-box {
+    height: 260px;
     max-height: 260px;
+    min-height: 0;
   }
 
   .log-stream {
     font-size: 10px;
+    line-height: 16px;
+  }
+
+  .log-line {
+    height: 16px;
+    min-height: 16px;
   }
 
   .action-btn {
