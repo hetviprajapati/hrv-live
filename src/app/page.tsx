@@ -208,6 +208,9 @@ export default function HrvLivePage() {
   const pmdControlRef = useRef<any | null>(null);
   const pmdDataRef = useRef<any | null>(null);
   const lastPpiPacketAtRef = useRef<number | null>(null);
+  const ppiPacketCountRef = useRef(0);
+  const ppiSampleCountRef = useRef(0);
+  const ppiStartedAtRef = useRef<number | null>(null);
 
   /**
    * All signal processing lives here. The component only renders what the
@@ -273,31 +276,51 @@ export default function HrvLivePage() {
     resetSession();
   }, [resetSession]);
 
-  const handleDeviceDisconnected = useCallback(
-    (event?: Event) => {
-      console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
+  // const handleDeviceDisconnected = useCallback(
+  //   (event?: Event) => {
+  //     console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
 
-      console.error('[Polar] Device:', bluetoothDeviceRef.current?.name);
+  //     console.error('[Polar] Device:', bluetoothDeviceRef.current?.name);
 
-      console.error('[Polar] GATT connected:', bluetoothDeviceRef.current?.gatt?.connected);
+  //     console.error('[Polar] GATT connected:', bluetoothDeviceRef.current?.gatt?.connected);
 
-      const device = (event?.target as any) ?? bluetoothDeviceRef.current;
+  //     const device = (event?.target as any) ?? bluetoothDeviceRef.current;
 
-      if (device) {
-        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-      }
+  //     if (device) {
+  //       device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+  //     }
 
-      bluetoothDeviceRef.current = null;
-      characteristicRef.current = null;
-      pmdControlRef.current = null;
-      pmdDataRef.current = null;
-      lastPpiPacketAtRef.current = null;
+  //     bluetoothDeviceRef.current = null;
+  //     characteristicRef.current = null;
+  //     pmdControlRef.current = null;
+  //     pmdDataRef.current = null;
+  //     lastPpiPacketAtRef.current = null;
 
-      teardownConnection();
-      setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
-    },
-    [teardownConnection],
-  );
+  //     teardownConnection();
+  //     setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
+  //   },
+  //   [teardownConnection],
+  // );
+
+  const handleDeviceDisconnected = useCallback((event?: Event) => {
+    const device = (event?.target as any) ?? bluetoothDeviceRef.current;
+
+    console.error('[Polar] GATT DISCONNECTED', {
+      time: new Date().toISOString(),
+      deviceName: device?.name,
+      deviceId: device?.id,
+      gattConnected: device?.gatt?.connected,
+    });
+
+    console.trace('[Polar] GATT disconnect stack');
+
+    // Do NOT immediately clear the refs or reset the session here.
+    // We want to inspect whether Chrome is actually dropping the
+    // connection or our application is triggering cleanup.
+
+    setConnected(false);
+    setErrorMessage('DEVICE DISCONNECTED — CHECK CONSOLE');
+  }, []);
 
   /* ---------------------------------------------------------------- *
    * Beat handling
@@ -485,6 +508,16 @@ export default function HrvLivePage() {
 
       if (!view || view.byteLength === 0) return;
 
+      ppiPacketCountRef.current += 1;
+
+      const elapsed = ppiStartedAtRef.current === null ? null : Date.now() - ppiStartedAtRef.current;
+
+      console.debug('[Verity Sense] PPI PACKET', {
+        packet: ppiPacketCountRef.current,
+        elapsedMs: elapsed,
+        size: view.byteLength,
+      });
+
       const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 
       console.debug(
@@ -495,6 +528,13 @@ export default function HrvLivePage() {
       );
 
       const samples = parsePpiMeasurement(view);
+
+      ppiSampleCountRef.current += samples.length;
+
+      console.debug('[Verity Sense] PPI TOTAL SAMPLES', {
+        packets: ppiPacketCountRef.current,
+        samples: ppiSampleCountRef.current,
+      });
 
       console.debug('[Verity Sense] PARSED PPI SAMPLES:', samples.length, samples);
 
@@ -730,6 +770,9 @@ export default function HrvLivePage() {
            * This matches the raw BLE approach shown in Polar's
            * own GitHub discussion for PPI.
            */
+          ppiPacketCountRef.current = 0;
+          ppiSampleCountRef.current = 0;
+          ppiStartedAtRef.current = Date.now();
           await pmdControl.writeValue(ppiStartCommand);
 
           console.debug('[Verity Sense] PPI start command sent successfully');
