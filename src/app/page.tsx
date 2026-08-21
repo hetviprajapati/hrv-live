@@ -275,7 +275,12 @@ export default function HrvLivePage() {
 
   const handleDeviceDisconnected = useCallback(
     (event?: Event) => {
-      console.error('[Polar] GATT DISCONNECTED', event?.target);
+      console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
+
+      console.error('[Polar] Device:', bluetoothDeviceRef.current?.name);
+
+      console.error('[Polar] GATT connected:', bluetoothDeviceRef.current?.gatt?.connected);
+
       const device = (event?.target as any) ?? bluetoothDeviceRef.current;
 
       if (device) {
@@ -477,9 +482,22 @@ export default function HrvLivePage() {
   const handlePpiMeasurement = useCallback(
     (event: Event) => {
       const view = (event.target as any)?.value as DataView | undefined;
+
       if (!view || view.byteLength === 0) return;
 
+      const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+
+      console.debug(
+        '[Verity Sense] RAW PPI DATA:',
+        Array.from(bytes)
+          .map((byte) => byte.toString(16).padStart(2, '0'))
+          .join(' '),
+      );
+
       const samples = parsePpiMeasurement(view);
+
+      console.debug('[Verity Sense] PARSED PPI SAMPLES:', samples.length, samples);
+
       if (samples.length === 0) return;
 
       const now = Date.now();
@@ -590,20 +608,31 @@ export default function HrvLivePage() {
       const name = device.name || 'POLAR DEVICE';
       const isVerity = isVeritySenseDevice(name);
 
-      // Standard Heart Rate service is still useful on Verity Sense for the
-      // headline HR, and it remains the primary RR source for the H10.
-      const service = await server.getPrimaryService('heart_rate');
-      const characteristic = await service.getCharacteristic('heart_rate_measurement');
+      /*
+       * H10:
+       *   Standard Heart Rate service -> RR intervals.
+       *
+       * Verity Sense:
+       *   PMD PPI stream -> PPI intervals.
+       *
+       * Keep the two paths isolated while debugging Chrome/Verity Sense.
+       * Do not enable the standard HR notification on Verity Sense because
+       * its HRV source is the PMD PPI stream.
+       */
+      if (!isVerity) {
+        const service = await server.getPrimaryService('heart_rate');
+        const characteristic = await service.getCharacteristic('heart_rate_measurement');
 
-      console.debug('[Polar] Enabling standard HR notifications...');
+        console.debug('[Polar] Enabling standard HR notifications...');
 
-      await characteristic.startNotifications();
+        await characteristic.startNotifications();
 
-      console.debug('[Polar] Standard HR notifications enabled');
+        console.debug('[Polar] Standard HR notifications enabled');
 
-      characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+        characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
 
-      characteristicRef.current = characteristic;
+        characteristicRef.current = characteristic;
+      }
 
       // Start recording before enabling PMD so the first PPI notification can
       // never arrive before the recorder has a session start time.
@@ -619,21 +648,27 @@ export default function HrvLivePage() {
         console.debug('[Verity Sense] PMD characteristics found');
 
         /*
+         * Prepare the PMD data path before the control point starts PPI.
+         *
          * PMD control uses indications.
          * PMD data uses notifications.
          */
-        await pmdControl.startNotifications();
-
-        console.debug('[Verity Sense] PMD control notifications enabled');
+        console.debug('[Verity Sense] Enabling PMD data notifications...');
 
         await pmdData.startNotifications();
 
         console.debug('[Verity Sense] PMD data notifications enabled');
 
+        pmdData.addEventListener('characteristicvaluechanged', handlePpiMeasurement);
+
+        console.debug('[Verity Sense] Enabling PMD control indications...');
+
+        await pmdControl.startNotifications();
+
+        console.debug('[Verity Sense] PMD control indications enabled');
+
         pmdControlRef.current = pmdControl;
         pmdDataRef.current = pmdData;
-
-        pmdData.addEventListener('characteristicvaluechanged', handlePpiMeasurement);
 
         /*
          * Keep this listener installed while we debug the complete PMD
@@ -665,7 +700,9 @@ export default function HrvLivePage() {
            */
           console.debug('[Verity Sense] Requesting PPI measurement settings...');
 
-          await pmdControl.writeValue(new Uint8Array([PMD_GET_MEASUREMENT_SETTINGS, PMD_MEASUREMENT_PPI]));
+          await pmdControl.writeValueWithResponse(new Uint8Array([PMD_GET_MEASUREMENT_SETTINGS, PMD_MEASUREMENT_PPI]));
+
+          console.debug('[Verity Sense] PPI settings command sent successfully');
 
           /*
            * Give the sensor time to send the indication.
@@ -678,7 +715,7 @@ export default function HrvLivePage() {
            */
           console.debug('[Verity Sense] Sending PPI start command...');
 
-          await pmdControl.writeValue(new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]));
+          await pmdControl.writeValueWithResponse(new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]));
 
           console.debug('[Verity Sense] PPI start command sent successfully');
 
