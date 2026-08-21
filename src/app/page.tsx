@@ -688,7 +688,11 @@ export default function HrvLivePage() {
             .map((byte) => byte.toString(16).padStart(2, '0'))
             .join(' ');
 
-          console.debug('[Verity Sense] PMD CONTROL RESPONSE:', hex);
+          console.debug('[Verity Sense] PMD CONTROL RESPONSE:', {
+            length: controlView.byteLength,
+            hex,
+            bytes: Array.from(bytes),
+          });
         };
 
         pmdControl.addEventListener('characteristicvaluechanged', handlePmdControl);
@@ -704,6 +708,12 @@ export default function HrvLivePage() {
 
           console.debug('[Verity Sense] PPI settings command sent successfully');
 
+          console.debug('[Verity Sense] AFTER PPI START:', {
+            gattConnected: device.gatt?.connected,
+            pmdControlConnected: !!pmdControl,
+            pmdDataConnected: !!pmdData,
+          });
+
           /*
            * Give the sensor time to send the indication.
            */
@@ -718,6 +728,12 @@ export default function HrvLivePage() {
           await pmdControl.writeValueWithResponse(new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]));
 
           console.debug('[Verity Sense] PPI start command sent successfully');
+
+          console.debug('[Verity Sense] AFTER PPI START:', {
+            gattConnected: device.gatt?.connected,
+            pmdControlConnected: !!pmdControl,
+            pmdDataConnected: !!pmdData,
+          });
 
           /*
            * IMPORTANT:
