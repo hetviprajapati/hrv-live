@@ -1153,77 +1153,6 @@ export default function HrvLivePage() {
   const num = (value: number | null, digits = 1) => (value !== null ? value.toFixed(digits) : '--');
   const artifactsTouched = snapshot.beatsCorrected + snapshot.beatsRejected;
 
-  // Keep track of the device and characteristic globally or in state
-  let connectedDevice: any = null;
-  let heartRateCharacteristic: any = null;
-
-  // Modified connection snippet to store the references
-  async function connectPolarVeritySense() {
-    try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ namePrefix: 'Polar' }],
-        optionalServices: [0x180d],
-      });
-
-      connectedDevice = device; // Save reference
-
-      // Setup listener to detect if the user forces a disconnect via system settings
-      connectedDevice.addEventListener('gattserverdisconnected', onDisconnected);
-
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(0x180d);
-      heartRateCharacteristic = await service.getCharacteristic(0x2a37); // Save reference
-
-      await heartRateCharacteristic.startNotifications();
-      heartRateCharacteristic.addEventListener('characteristicvaluechanged', handleData);
-
-      console.log('Connected!');
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  // The Disconnect Function
-  async function disconnectPolarVeritySense() {
-    if (!connectedDevice) {
-      console.log('No device connected.');
-      return;
-    }
-
-    try {
-      // 1. Stop receiving live data notifications safely
-      if (heartRateCharacteristic) {
-        await heartRateCharacteristic.stopNotifications();
-        heartRateCharacteristic.removeEventListener('characteristicvaluechanged', handleData);
-        heartRateCharacteristic = null;
-      }
-
-      // 2. Disconnect from the GATT Server
-      if (connectedDevice.gatt.connected) {
-        await connectedDevice.gatt.disconnect();
-        // This will automatically trigger the 'gattserverdisconnected' listener below
-      }
-    } catch (error) {
-      console.log('Error during disconnection:', error);
-    }
-  }
-
-  // Cleanup callback function when disconnection finishes
-  function onDisconnected(event: any) {
-    const device = event.target;
-    console.log(`Device ${device.name} has disconnected safely.`);
-
-    // Reset your application state variables
-    connectedDevice = null;
-    heartRateCharacteristic = null;
-  }
-
-  // Shared data handler function
-  function handleData(event: any) {
-    const heartRate = event.target.value.getUint8(1);
-    console.log(`Heart Rate: ${heartRate} bpm`);
-  }
-
   /* ---------------------------------------------------------------- *
    * Render
    * ---------------------------------------------------------------- */
@@ -1301,9 +1230,6 @@ export default function HrvLivePage() {
 
             <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
               {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Hardware'}
-            </button>
-            <button className="action-btn" onClick={connected && !demoMode ? disconnectPolarVeritySense : connectPolarVeritySense}>
-              {connected && !demoMode ? '[ DISCONNECT VARIETY FEED ]' : 'Connect Variety'}
             </button>
           </div>
 
