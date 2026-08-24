@@ -101,7 +101,6 @@
 
 .vector-box {
   align-items: center;
-  justify-content: center;
   min-height: 250px;
 }
 .heart-wireframe {
@@ -123,6 +122,9 @@
   letter-spacing: 1px;
   text-transform: uppercase;
   text-shadow: 0 0 4px rgba(255, 42, 42, 0.4);
+  &.alert-red {
+    color: red;
+  }
 }
 @keyframes pulse {
   0% {
