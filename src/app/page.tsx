@@ -11,7 +11,7 @@ import {
   type PendingResolution,
   type SignalQuality,
 } from '@/lib/hrv-live/hrv-engine';
-import { SessionRecorder, saveRecording, copyRecordingToClipboard } from '@/lib/hrv-live/session-recorder';
+import { SessionRecorder, saveRecording } from '@/lib/hrv-live/session-recorder';
 
 /* ------------------------------------------------------------------ *
  * Types
@@ -736,8 +736,9 @@ export default function HrvLivePage() {
            */
           console.debug('[Verity Sense] Sending PPI start command...');
 
-          const ppiStartCommand = new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]);
+          //const ppiStartCommand = new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]);
 
+          const ppiStartCommand = new Uint8Array([0x02, 0x01]);
           console.debug(
             '[Verity Sense] PPI START COMMAND:',
             Array.from(ppiStartCommand)
@@ -756,9 +757,9 @@ export default function HrvLivePage() {
           ppiPacketCountRef.current = 0;
           ppiSampleCountRef.current = 0;
           ppiStartedAtRef.current = Date.now();
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          // await new Promise((resolve) => setTimeout(resolve, 300));
 
-          // await pmdControl.writeValue(ppiStartCommand);
+          await pmdControl.writeValue(ppiStartCommand);
 
           console.debug('[Verity Sense] PPI start command sent successfully');
 
@@ -983,25 +984,6 @@ export default function HrvLivePage() {
         console.error(error);
         setExportNote('EXPORT FAILED — SEE BROWSER CONSOLE');
       });
-  }, []);
-
-  /**
-   * Explicit escape hatch. If a browser blocks both the share sheet and the
-   * download, the data can still be got out by pasting it somewhere.
-   */
-  const copyRecording = useCallback(() => {
-    const recorder = recorderRef.current;
-
-    if (recorder.isEmpty) {
-      setExportNote('NOTHING RECORDED YET — CONNECT AND WEAR THE STRAP FIRST');
-      return;
-    }
-
-    const recording = recorder.build(APP_VERSION, DEFAULT_CONFIG, Date.now());
-
-    copyRecordingToClipboard(recording).then((ok) => {
-      setExportNote(ok ? `COPIED ${recording.summary.beats} BEATS TO CLIPBOARD — PASTE INTO A MESSAGE` : 'CLIPBOARD BLOCKED BY BROWSER');
-    });
   }, []);
 
   /* ---------------------------------------------------------------- *
