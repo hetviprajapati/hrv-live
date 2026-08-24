@@ -753,7 +753,9 @@ export default function HrvLivePage() {
           ppiPacketCountRef.current = 0;
           ppiSampleCountRef.current = 0;
           ppiStartedAtRef.current = Date.now();
-          await pmdControl.writeValue(ppiStartCommand);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          // await pmdControl.writeValue(ppiStartCommand);
 
           console.debug('[Verity Sense] PPI start command sent successfully');
 
