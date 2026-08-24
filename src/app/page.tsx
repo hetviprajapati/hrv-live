@@ -46,6 +46,7 @@ const EMPTY_SNAPSHOT: HrvSnapshot = {
   beatsRejected: 0,
   validDiffs: 0,
   windowSize: 0,
+  cleanWindowSize: 0,
   ready: false,
 };
 
@@ -57,8 +58,7 @@ const PACKET_GAP_MS = 2500;
 const BEAT_CLOCK_RESYNC_MS = 1500;
 const APP_VERSION = '2.1.0';
 
-const MAX_LOG_ROWS = 40;
-const VISIBLE_LOG_ROWS = 24;
+const VISIBLE_LOG_ROWS = 18;
 const MAX_TRACE_POINTS = 60;
 
 /* ------------------------------------------------------------------ *
@@ -311,7 +311,7 @@ export default function HrvLivePage() {
     logIdRef.current += 1;
     const withId: LogEntry = { ...entry, id: logIdRef.current };
 
-    setLogs((previous) => [withId, ...previous].slice(0, MAX_LOG_ROWS));
+    setLogs((previous) => [withId, ...previous].slice(0, VISIBLE_LOG_ROWS));
   }, []);
 
   /**
@@ -1164,7 +1164,7 @@ export default function HrvLivePage() {
 
         <div>
           DEVICE SYNC:{' '}
-          <b className={connected ? 'device-connected' : 'device-offline'}>
+          <b className={demoMode ? 'demo-mode' : connected ? 'device-connected' : 'device-offline'}>
             {demoMode ? 'DEMO MODE' : connected ? 'CONNECTED' : 'OFFLINE'}
           </b>
         </div>
@@ -1229,7 +1229,7 @@ export default function HrvLivePage() {
             ) : null}
 
             <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
-              {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Hardware'}
+              {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect POLAR H10 Heart Rate Sensor'}
             </button>
           </div>
 
@@ -1251,40 +1251,43 @@ export default function HrvLivePage() {
             </div>
 
             <div className="watchlist">
-              <div className="wl-row">
-                <span className="wl-label">SDNN</span>
-                <span className="wl-val tk-cyan">{sdnn !== null ? `${sdnn.toFixed(1)} ms` : '-- ms'}</span>
-              </div>
+              <div>
+                <div className="wl-row">
+                  <span className="wl-label">SDNN</span>
+                  <span className="wl-val tk-cyan">{sdnn !== null ? `${sdnn.toFixed(1)} ms` : '-- ms'}</span>
+                </div>
 
-              <div className="wl-row">
-                <span className="wl-label">pNN50</span>
-                <span className="wl-val tk-cyan">{pnn50 !== null ? `${pnn50.toFixed(1)} %` : '-- %'}</span>
-              </div>
+                <div className="wl-row">
+                  <span className="wl-label">pNN50</span>
+                  <span className="wl-val tk-cyan">{pnn50 !== null ? `${pnn50.toFixed(1)} %` : '-- %'}</span>
+                </div>
 
-              <div className="wl-row">
-                <span className="wl-label">1MIN AVG RMSSD</span>
-                <span className="wl-val tk-yellow">{avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}</span>
+                <div className="wl-row">
+                  <span className="wl-label">1MIN AVG RMSSD</span>
+                  <span className="wl-val tk-yellow">{avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}</span>
+                </div>
               </div>
+              <div>
+                <div className="wl-row">
+                  <span className="wl-label">DELTA vs PREV</span>
+                  <span className={`wl-val ${delta === null ? '' : delta >= 0 ? 'tk-green' : 'tk-red'}`}>
+                    {delta !== null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ms` : '-- ms'}
+                  </span>
+                </div>
 
-              <div className="wl-row">
-                <span className="wl-label">DELTA vs PREV</span>
-                <span className={`wl-val ${delta === null ? '' : delta >= 0 ? 'tk-green' : 'tk-red'}`}>
-                  {delta !== null ? `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} ms` : '-- ms'}
-                </span>
-              </div>
+                <div className="wl-row">
+                  <span className="wl-label">SIGNAL QUALITY</span>
+                  <span className={`wl-val ${QUALITY_CLASS[quality]}`}>
+                    {QUALITY_LABEL[quality]} · {(artifactRate * 100).toFixed(1)}% FILTERED
+                  </span>
+                </div>
 
-              <div className="wl-row">
-                <span className="wl-label">SIGNAL QUALITY</span>
-                <span className={`wl-val ${QUALITY_CLASS[quality]}`}>
-                  {QUALITY_LABEL[quality]} · {(artifactRate * 100).toFixed(1)}% FILTERED
-                </span>
-              </div>
-
-              <div className="wl-row">
-                <span className="wl-label">CLEAN INTERVALS</span>
-                <span className="wl-val tk-cyan">
-                  {snapshot.validDiffs} / {Math.max(0, snapshot.windowSize - 1)}
-                </span>
+                <div className="wl-row">
+                  <span className="wl-label">CLEAN INTERVALS</span>
+                  <span className="wl-val tk-cyan">
+                    {snapshot.cleanWindowSize} / {VISIBLE_LOG_ROWS}
+                  </span>
+                </div>
               </div>
             </div>
 

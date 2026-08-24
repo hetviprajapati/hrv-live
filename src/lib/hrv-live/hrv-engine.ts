@@ -218,6 +218,7 @@ export interface HrvSnapshot {
   windowSize: number;
   /** True when there is enough clean data to show a number honestly. */
   ready: boolean;
+  cleanWindowSize: number;
 }
 
 export interface HrvEngineConfig {
@@ -291,8 +292,8 @@ export interface HrvEngineConfig {
 }
 
 export const DEFAULT_CONFIG: HrvEngineConfig = {
-  windowBeats: 40,
-  minDiffsToPublish: 20,
+  windowBeats: 18,
+  minDiffsToPublish: 17,
 
   minRrMs: 300,
   maxRrMs: 2000,
@@ -573,6 +574,8 @@ export class HrvEngine {
 
     const meanRr = this.window.length > 0 ? this.window.reduce((s, b) => s + b.rr, 0) / this.window.length : null;
 
+    const cleanWindowSize = this.window.filter((beat) => beat.disposition === 'accepted').length;
+
     return {
       heartRate: meanRr !== null && meanRr > 0 ? Math.round(60000 / meanRr) : null,
       rmssd: publish ? rmssd : null,
@@ -591,6 +594,7 @@ export class HrvEngine {
 
       validDiffs,
       windowSize: this.window.length,
+      cleanWindowSize,
       ready: publish,
     };
   }
@@ -629,8 +633,7 @@ export class HrvEngine {
     const tolerance = this.pairTolerance();
 
     const prev = this.lastCleanRr;
-    const incomingDeviates =
-      (prev !== null && Math.abs(rawRr - prev) > diffTh) || Math.abs(rawRr - level) > levelTh;
+    const incomingDeviates = (prev !== null && Math.abs(rawRr - prev) > diffTh) || Math.abs(rawRr - level) > levelTh;
 
     if (!incomingDeviates) return null;
 
@@ -772,9 +775,7 @@ export class HrvEngine {
 
     if (!Number.isFinite(qd)) {
       const level = this.localLevel();
-      const fallback = Number.isFinite(level)
-        ? this.cfg.warmupDiffFraction * level
-        : this.cfg.maxDiffThresholdMs;
+      const fallback = Number.isFinite(level) ? this.cfg.warmupDiffFraction * level : this.cfg.maxDiffThresholdMs;
 
       return clamp(fallback, this.cfg.minDiffThresholdMs, this.cfg.maxDiffThresholdMs);
     }
@@ -791,9 +792,7 @@ export class HrvEngine {
 
     if (!Number.isFinite(qd)) {
       const level = this.localLevel();
-      const fallback = Number.isFinite(level)
-        ? this.cfg.warmupLevelFraction * level
-        : this.cfg.maxLevelThresholdMs;
+      const fallback = Number.isFinite(level) ? this.cfg.warmupLevelFraction * level : this.cfg.maxLevelThresholdMs;
 
       return clamp(fallback, this.cfg.minLevelThresholdMs, this.cfg.maxLevelThresholdMs);
     }

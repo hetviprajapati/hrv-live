@@ -4,7 +4,6 @@
   background: #050505;
   border-bottom: 1px solid var(--dim-orange);
   padding: 5px 0;
-  margin-top: 4px;
 }
 .ticker-tape-inner {
   display: inline-block;
@@ -60,11 +59,14 @@
 }
 .terminal-header b {
   color: #fff;
+  &.demo-mode {
+    color: red;
+  }
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 280px 1fr 280px;
   gap: 15px;
   margin-top: 15px;
   min-width: 780px;
@@ -137,7 +139,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 15px;
-  margin-top: 10px;
 }
 .gauge-block {
   border: 1px dashed #333;
@@ -146,7 +147,7 @@
   min-width: 0;
 }
 .gauge-value {
-  font-size: 42px;
+  font-size: 40px;
   font-weight: bold;
   color: #fff;
   margin: 5px 0;
@@ -159,9 +160,10 @@
 }
 
 .watchlist {
-  margin-top: 12px;
-  border-top: 1px dashed #333;
   padding-top: 8px;
+  display: flex;
+  gap: 4px;
+  justify-content: space-between;
 }
 .wl-row {
   display: flex;
@@ -185,8 +187,8 @@
 
 .graph-area {
   border: 1px solid #222;
-  height: 150px;
-  margin-top: 15px;
+  height: 121px;
+  margin-top: 10px;
   background: #020202;
   position: relative;
 }
@@ -209,8 +211,9 @@
  * renders only VISIBLE_LOG_ROWS, so a nested scrolling layer is unnecessary.
  */
 .ledger-box {
-  height: 485px;
-  max-height: 485px;
+  /* height: 400px;
+  max-height: 400px; */
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
@@ -363,11 +366,11 @@
     height: 140px;
   }
 
-  .ledger-box {
+  /* .ledger-box {
     height: 420px;
     max-height: 420px;
     min-height: 0;
-  }
+  } */
 
   .log-stream {
     font-size: 11px;
