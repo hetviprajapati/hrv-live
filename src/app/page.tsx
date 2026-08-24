@@ -230,7 +230,7 @@ export default function HrvLivePage() {
   const lastRmssdRef = useRef<number | null>(null);
 
   const [connected, setConnected] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
+  const [demoMode, setDemoMode] = useState(true);
   const [deviceName, setDeviceName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [contactWarning, setContactWarning] = useState(false);
@@ -297,7 +297,8 @@ export default function HrvLivePage() {
       lastPpiPacketAtRef.current = null;
 
       teardownConnection();
-      setErrorMessage('DEVICE DISCONNECTED — FEED CLOSED');
+      startDemo();
+      setErrorMessage('POLAR DISCONNECTED — DEMO MODE ACTIVE');
     },
     [teardownConnection],
   );
@@ -603,6 +604,8 @@ export default function HrvLivePage() {
   const connectPolar = async () => {
     setErrorMessage('');
 
+    stopDemo();
+
     if (!(navigator as any).bluetooth) {
       setErrorMessage('WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS');
       return;
@@ -819,6 +822,7 @@ export default function HrvLivePage() {
             ? error.message
             : 'CONNECTION FAILED — CHECK THE POLAR DEVICE IS ON, WORN, AND NOT CONNECTED TO ANOTHER APP',
       );
+      startDemo();
     }
   };
 
@@ -850,6 +854,7 @@ export default function HrvLivePage() {
       pmdDataRef.current = null;
       lastPpiPacketAtRef.current = null;
       teardownConnection();
+      startDemo();
     }
   };
 
@@ -890,30 +895,50 @@ export default function HrvLivePage() {
     ingestBeat(rr, now, true);
   }, [ingestBeat]);
 
-  const toggleDemo = () => {
-    if (demoMode) {
-      if (simulationRef.current) clearInterval(simulationRef.current);
-      simulationRef.current = null;
-
-      setDemoMode(false);
-      setConnected(false);
-      setDeviceName('');
-      resetSession();
-
-      return;
+  const startDemo = useCallback(() => {
+    if (simulationRef.current) {
+      clearInterval(simulationRef.current);
     }
 
     resetSession();
-    demoStateRef.current = { phase: 0, beatsUntilArtifact: 25 };
+
+    demoStateRef.current = {
+      phase: 0,
+      beatsUntilArtifact: 25,
+    };
+
     recorderRef.current.start('demo', 'SIMULATED DEVICE', Date.now());
 
     setDemoMode(true);
     setConnected(true);
-    setDeviceName('SIMULATED DEVICE');
+    setDeviceName('DEMO — SIMULATED DEVICE');
     setErrorMessage('');
 
+    // Immediately create the first reading instead of waiting 900ms.
+    pushSimulatedReading();
+
     simulationRef.current = setInterval(pushSimulatedReading, 900);
-  };
+  }, [pushSimulatedReading, resetSession]);
+
+  const stopDemo = useCallback(() => {
+    if (simulationRef.current) {
+      clearInterval(simulationRef.current);
+      simulationRef.current = null;
+    }
+
+    setDemoMode(false);
+  }, []);
+
+  useEffect(() => {
+    startDemo();
+
+    return () => {
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+        simulationRef.current = null;
+      }
+    };
+  }, [startDemo]);
 
   const exportRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -1222,6 +1247,10 @@ export default function HrvLivePage() {
                 <span className="tk-red">REC</span> {recordedBeats.toLocaleString()} LOGGED
               </div>
             ) : null}
+
+            <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
+              {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Hardware'}
+            </button>
           </div>
 
           <div className="panel">
@@ -1317,46 +1346,6 @@ export default function HrvLivePage() {
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="control-dock">
-        <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
-          {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Hardware'}
-        </button>
-
-        <button className={`action-btn demo-btn ${demoMode ? 'demo-active' : ''}`} onClick={toggleDemo}>
-          {demoMode ? '■ Stop Demo' : '▶ Preview Demo Data'}
-        </button>
-
-        <button
-          className="action-btn"
-          onClick={exportRecording}
-          disabled={recordedBeats === 0}
-          title="Download this session as a file you can send for analysis"
-        >
-          ⤓ SAVE SESSION LOG{recordedBeats > 0 ? ` (${recordedBeats.toLocaleString()})` : ''}
-        </button>
-        <button
-          className="action-btn"
-          onClick={copyRecording}
-          disabled={recordedBeats === 0}
-          title="Copy the session log as text, if saving a file is blocked"
-        >
-          ⧉ COPY LOG
-        </button>
-
-        <input
-          type="text"
-          className="cmd-line"
-          readOnly
-          value={
-            demoMode
-              ? 'COMMAND >> /ANALYZE /TREND=DEMO /FILTER=ON /DEVICE=SIMULATED_PREVIEW'
-              : connected
-                ? `COMMAND >> /ANALYZE /TREND=LIVE /FILTER=ON /DEVICE=${deviceName.toUpperCase()}`
-                : 'COMMAND >> /ANALYZE /TREND=REALTIME /DEVICE=PENDING...'
-          }
-        />
       </div>
 
       <div className="fkey-bar">
