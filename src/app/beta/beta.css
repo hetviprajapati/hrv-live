@@ -243,6 +243,10 @@
 .log-line span {
   color: #fff;
   flex: 0 0 auto;
+  &.tk-red {
+    color: var(--red-alert);
+    font-weight: bold;
+  }
 }
 
 .log-line span:last-child {

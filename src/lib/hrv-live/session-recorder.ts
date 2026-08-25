@@ -25,20 +25,16 @@
  * no location, no account identifier. It stays on the user's machine until they
  * choose to send the file.
  */
-
-import type { HrvEngineConfig, HrvSnapshot, BeatEvent } from './hrv-engine';
-
+ 
+import type { Beat, HrvConfig, HrvSnapshot } from './hrv-engine';
+ 
 export const RECORDING_FORMAT = 'hrv.live/session-recording';
 export const RECORDING_VERSION = 1;
 
 export interface RecordedPacket {
   /** Milliseconds since session start. */
   t: number;
-  /**
-   * Raw characteristic bytes, space-separated hex. The ground truth.
-   * For Verity Sense this may be a Polar PMD/PPI packet rather than the
-   * standard Heart Rate Measurement characteristic.
-   */
+  /** Raw characteristic bytes, space-separated hex. The ground truth. */
   hex: string;
   bpm: number;
   /** Parsed RR intervals, milliseconds. */
@@ -52,12 +48,11 @@ export interface RecordedPacket {
 
 export interface RecordedBeat {
   t: number;
-  raw: number;
-  disposition: string;
-  correction: string;
-  emitted: number[];
-  threshold: number;
-  localMedian: number;
+  /** Exactly what the sensor reported. */
+  rr: number;
+  /** True = flagged by the rule, shown but not counted. */
+  bad: boolean;
+  reason: string;
 }
 
 export interface RecordedSample {
@@ -67,9 +62,8 @@ export interface RecordedSample {
   sdnn: number | null;
   pnn50: number | null;
   avg60: number | null;
-  quality: string;
   artifactRate: number;
-  validDiffs: number;
+  goodBeats: number;
   windowSize: number;
 }
 
@@ -83,15 +77,15 @@ export interface SessionRecording {
   endedAt: string;
   durationMs: number;
   userAgent: string;
-  engineConfig: Partial<HrvEngineConfig>;
+  engineConfig: Partial<HrvConfig>;
   summary: {
     packets: number;
     beats: number;
-    accepted: number;
-    corrected: number;
-    /** Flagged and awaiting a partner. Resolved by the following beat. */
-    held: number;
-    rejected: number;
+    /** Beats that counted toward the score. */
+    counted: number;
+    /** Beats flagged by the rule. */
+    flagged: number;
+    /** Breakdown of why beats were excluded. */
     gaps: number;
     /** Longest run of identical raw values seen. Diagnoses a frozen sensor. */
     longestRepeatRun: number;
@@ -122,10 +116,8 @@ export class SessionRecorder {
   private longestRepeatRun = 0;
 
   private gaps = 0;
-  private accepted = 0;
-  private corrected = 0;
-  private held = 0;
-  private rejected = 0;
+  private counted = 0;
+  private flagged = 0;
   private blankSamples = 0;
 
   private mode: 'live' | 'demo' = 'live';
@@ -149,10 +141,8 @@ export class SessionRecorder {
     this.repeatRun = 0;
     this.longestRepeatRun = 0;
     this.gaps = 0;
-    this.accepted = 0;
-    this.corrected = 0;
-    this.held = 0;
-    this.rejected = 0;
+    this.counted = 0;
+    this.flagged = 0;
     this.blankSamples = 0;
   }
 
@@ -190,36 +180,25 @@ export class SessionRecorder {
       sincePrev,
     });
   }
-
-  addBeat(event: BeatEvent, now: number): void {
+ 
+  addBeat(beat: Beat, now: number): void {
     if (this.beats.length >= MAX_ENTRIES) return;
-
-    // Track repeated raw values independently of the engine, so the recording
-    // can answer "is the strap freezing?" even if the rule is switched off.
-    this.repeatRun = event.raw === this.lastRaw ? this.repeatRun + 1 : 1;
-    this.lastRaw = event.raw;
+ 
+    // Track repeated raw values independently, so the recording can still
+    // answer "is the sensor freezing?" even though the rule no longer looks
+    // for that.
+    this.repeatRun = beat.rr === this.lastRaw ? this.repeatRun + 1 : 1;
+    this.lastRaw = beat.rr;
     if (this.repeatRun > this.longestRepeatRun) this.longestRepeatRun = this.repeatRun;
-
-    // A beat reported as rejected with no correction reason is not discarded —
-    // it is being HELD for one beat to see whether its partner arrives. Calling
-    // that "rejected" in the summary overstates how much data is being thrown
-    // away, since most held beats are then reconstructed rather than dropped.
-    const held = event.disposition === 'rejected' && event.correction === 'none';
-    const disposition = held ? 'held' : event.disposition;
-
-    if (disposition === 'accepted') this.accepted += 1;
-    else if (disposition === 'corrected') this.corrected += 1;
-    else if (disposition === 'held') this.held += 1;
-    else this.rejected += 1;
-
+ 
+    if (beat.bad) this.flagged += 1;
+    else this.counted += 1;
+ 
     this.beats.push({
       t: now - this.startedAt,
-      raw: Math.round(event.raw * 100) / 100,
-      disposition,
-      correction: event.correction,
-      emitted: event.emitted.map((value) => Math.round(value * 100) / 100),
-      threshold: Math.round(event.threshold * 10) / 10,
-      localMedian: Number.isFinite(event.localMedian) ? Math.round(event.localMedian * 10) / 10 : 0,
+      rr: Math.round(beat.rr * 100) / 100,
+      bad: beat.bad,
+      reason: beat.reason,
     });
   }
 
@@ -237,14 +216,13 @@ export class SessionRecorder {
       sdnn: round(snapshot.sdnn),
       pnn50: round(snapshot.pnn50),
       avg60: round(snapshot.avgRmssd60s),
-      quality: snapshot.quality,
       artifactRate: Math.round(snapshot.artifactRate * 1000) / 1000,
-      validDiffs: snapshot.validDiffs,
+      goodBeats: snapshot.goodBeats,
       windowSize: snapshot.windowSize,
     });
   }
-
-  build(appVersion: string, engineConfig: Partial<HrvEngineConfig>, now: number): SessionRecording {
+ 
+  build(appVersion: string, engineConfig: Partial<HrvConfig>, now: number): SessionRecording {
     return {
       format: RECORDING_FORMAT,
       version: RECORDING_VERSION,
@@ -259,10 +237,8 @@ export class SessionRecorder {
       summary: {
         packets: this.packets.length,
         beats: this.beats.length,
-        accepted: this.accepted,
-        corrected: this.corrected,
-        held: this.held,
-        rejected: this.rejected,
+        counted: this.counted,
+        flagged: this.flagged,
         gaps: this.gaps,
         longestRepeatRun: this.longestRepeatRun,
         longestPacketGapMs: this.longestPacketGapMs,
@@ -283,6 +259,10 @@ export class SessionRecorder {
  * on iOS implements Web Bluetooth at all — so any user with a live feed on an
  * iPad is in a WKWebView, and in a WKWebView an `<a download>` pointing at a
  * blob URL does nothing whatsoever. No error, no file, no clue.
+ *
+ * So we try the mechanisms in order of how well they work on the device we are
+ * actually on, and report back which one succeeded so the UI can tell the user
+ * where to look for the file.
  */
 export type SaveOutcome =
   | { method: 'share'; filename: string; bytes: number }
@@ -307,7 +287,8 @@ function recordingJson(recording: SessionRecording): string {
  *
  * IMPORTANT: call this synchronously from the click handler. iOS only allows
  * the share sheet to open while a user gesture is still live, and any `await`
- * before `navigator.share()` forfeits that gesture.
+ * before `navigator.share()` forfeits that gesture. Everything up to the share
+ * call here is synchronous for that reason.
  */
 export async function saveRecording(recording: SessionRecording): Promise<SaveOutcome> {
   const filename = recordingFilename(recording);
@@ -316,8 +297,13 @@ export async function saveRecording(recording: SessionRecording): Promise<SaveOu
   const blob = new Blob([json], { type: 'application/json' });
 
   const nav = navigator as any;
-
-  /* 1. Share sheet — the only thing that reliably works on iPad. */
+ 
+  /* 1. Share sheet — the only thing that reliably works on iPad.
+   *
+   * Opens the native share sheet, from which the user can Save to Files, mail
+   * it, AirDrop it, or send it through any messaging app. Requires iOS 15+ and
+   * a live user gesture.
+   */
   if (typeof File === 'function' && nav.share && nav.canShare) {
     try {
       const file = new File([blob], filename, { type: 'application/json' });
@@ -328,11 +314,12 @@ export async function saveRecording(recording: SessionRecording): Promise<SaveOu
         return { method: 'share', filename, bytes };
       }
     } catch (error) {
-      // A user who taps Cancel has not hit a bug. Falling through to a silent
-      // download here would be worse than stopping.
+      // A user who taps Cancel on the share sheet has not hit a bug. Falling
+      // through to a silent download here would be worse than stopping.
       if (error instanceof Error && error.name === 'AbortError') {
         return { method: 'cancelled', filename, bytes };
       }
+      // Anything else: fall through and try the next mechanism.
     }
   }
 

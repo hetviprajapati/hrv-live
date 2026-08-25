@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './beta.css';
 import {
-  DEFAULT_CONFIG,
-  HrvEngine,
+  EMPTY_SNAPSHOT,
+  HRV_CONFIG,
+  createHrvState,
+  getSnapshot,
   parseHeartRateMeasurement,
-  type CorrectionKind,
+  pushBeat,
+  resetHrvState,
+  type Beat,
   type HrvSnapshot,
-  type PendingResolution,
-  type SignalQuality,
+  type HrvState,
 } from '@/lib/hrv-live/hrv-engine';
 import { SessionRecorder, saveRecording } from '@/lib/hrv-live/session-recorder';
 
@@ -17,37 +20,15 @@ import { SessionRecorder, saveRecording } from '@/lib/hrv-live/session-recorder'
  * Types
  * ------------------------------------------------------------------ */
 
-type BeatStatus = 'ok' | 'held' | 'corrected' | 'rejected';
-
 type LogEntry = {
   id: number;
   timestamp: string;
-  /** The value the sensor actually reported. Always shown, never hidden. */
-  raw: number;
-  /** The value used in the calculation, when it differs from the raw one. */
-  used: number | null;
-  status: BeatStatus;
-  note: string;
+  /** Exactly what the sensor reported. Never altered. */
+  rr: number;
+  /** True = flagged by the rule. Shown in red, not counted. */
+  bad: boolean;
+  reason: string;
   demo?: boolean;
-};
-
-const EMPTY_SNAPSHOT: HrvSnapshot = {
-  heartRate: null,
-  rmssd: null,
-  sdnn: null,
-  pnn50: null,
-  avgRmssd60s: null,
-  meanRr: null,
-  quality: 'acquiring',
-  artifactRate: 0,
-  beatsSeen: 0,
-  beatsClean: 0,
-  beatsCorrected: 0,
-  beatsRejected: 0,
-  validDiffs: 0,
-  windowSize: 0,
-  cleanWindowSize: 0,
-  ready: false,
 };
 
 /**
@@ -56,62 +37,37 @@ const EMPTY_SNAPSHOT: HrvSnapshot = {
  */
 const PACKET_GAP_MS = 2500;
 const BEAT_CLOCK_RESYNC_MS = 1500;
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '3.0.0';
 
-const VISIBLE_LOG_ROWS = 18;
+/**
+ * One number drives both the log panel and the score, so the rows on screen
+ * are exactly the beats the reading was calculated from.
+ */
+const VISIBLE_LOG_ROWS = HRV_CONFIG.windowBeats;
 const MAX_TRACE_POINTS = 60;
 
 /* ------------------------------------------------------------------ *
- * Presentation helpers
+ * Presentation
  * ------------------------------------------------------------------ */
 
-const QUALITY_LABEL: Record<SignalQuality, string> = {
-  acquiring: 'ACQUIRING',
-  excellent: 'EXCELLENT',
-  good: 'GOOD',
-  fair: 'FAIR',
-  poor: 'POOR',
-};
+/**
+ * A label for the flagged share of the window. It is only ever a label — it
+ * never hides or changes the number.
+ */
+function qualityLabel(rate: number, ready: boolean): string {
+  if (!ready) return 'ACQUIRING';
+  if (rate > 0.15) return 'NOISY';
+  if (rate > 0.05) return 'FAIR';
 
-const QUALITY_CLASS: Record<SignalQuality, string> = {
-  acquiring: 'tk-yellow',
-  excellent: 'tk-green',
-  good: 'tk-green',
-  fair: 'tk-yellow',
-  poor: 'tk-red',
-};
+  return 'CLEAN';
+}
 
-const STATUS_CLASS: Record<BeatStatus, string> = {
-  ok: 'tk-green',
-  held: 'tk-yellow',
-  corrected: 'tk-yellow',
-  rejected: 'tk-red',
-};
+function qualityClass(rate: number, ready: boolean): string {
+  if (!ready) return 'tk-yellow';
+  if (rate > 0.15) return 'tk-red';
+  if (rate > 0.05) return 'tk-yellow';
 
-const STATUS_MARK: Record<BeatStatus, string> = {
-  ok: ' ',
-  held: '?',
-  corrected: '*',
-  rejected: 'x',
-};
-
-function correctionNote(event: { correction: CorrectionKind }): string {
-  switch (event.correction) {
-    case 'misplaced-pair':
-      return 'MISPLACED BEAT — TIMING REBUILT';
-    case 'missed-beat':
-      return 'MISSED BEAT — INSERTED';
-    case 'extra-beat':
-      return 'EXTRA DETECTION — MERGED';
-    case 'out-of-range':
-      return 'OUTSIDE PHYSIOLOGICAL RANGE';
-    case 'sensor-stuck':
-      return 'SENSOR REPEATING — VALUE FROZEN';
-    case 'unrepairable':
-      return 'NOISE — DISCARDED';
-    default:
-      return '';
-  }
+  return 'tk-green';
 }
 
 function formatTimestamp(date: Date): string {
@@ -137,7 +93,6 @@ const POLAR_PMD_SERVICE_UUID = 'fb005c80-02e7-f387-1cad-8acd2d8df0c8';
 const POLAR_PMD_CONTROL_UUID = 'fb005c81-02e7-f387-1cad-8acd2d8df0c8';
 const POLAR_PMD_DATA_UUID = 'fb005c82-02e7-f387-1cad-8acd2d8df0c8';
 
-const PMD_GET_MEASUREMENT_SETTINGS = 0x01;
 const PMD_REQUEST_MEASUREMENT_START = 0x02;
 const PMD_MEASUREMENT_PPI = 0x03;
 
@@ -161,12 +116,6 @@ function isVeritySenseDevice(name: string): boolean {
  *   bytes 1..8  device timestamp
  *   byte 9      frame type (0 = normal PPI frame)
  *   byte 10..   repeated 6-byte PPI samples
- *
- * Each PPI sample:
- *   byte 0      HR
- *   bytes 1..2  pulse-to-pulse interval in ms, little-endian
- *   bytes 3..4  error estimate
- *   byte 5      blocker / skin-contact flags
  */
 function parsePpiMeasurement(view: DataView): PpiSample[] {
   if (view.byteLength < 16) return [];
@@ -208,23 +157,21 @@ export default function HrvLivePage() {
   const pmdControlRef = useRef<any | null>(null);
   const pmdDataRef = useRef<any | null>(null);
   const lastPpiPacketAtRef = useRef<number | null>(null);
-  const ppiPacketCountRef = useRef(0);
-  const ppiSampleCountRef = useRef(0);
-  const ppiStartedAtRef = useRef<number | null>(null);
 
   /**
-   * All signal processing lives here. The component only renders what the
-   * engine reports — it does no arithmetic on RR intervals of its own.
+   * All the filtering lives here — a plain object, not a class instance.
+   * The component only renders what `getSnapshot` returns.
    */
-  const engineRef = useRef<HrvEngine>(new HrvEngine());
+  const hrvRef = useRef<HrvState>(createHrvState());
 
-  /**
-   * Records the whole session so it can be replayed offline. Always on — a
-   * user who has just watched the number misbehave should not have to
-   * reproduce it with recording enabled.
-   */
   const recorderRef = useRef<SessionRecorder>(new SessionRecorder());
   const lastPacketAtRef = useRef<number | null>(null);
+
+  /**
+   * When the most recent beat actually happened. Packet arrival is not beat
+   * time — the sensor notifies on its own schedule — so beat times are chained
+   * forward from the intervals themselves and only re-anchored when they drift.
+   */
   const beatClockRef = useRef<number | null>(null);
   const logIdRef = useRef(0);
   const lastRmssdRef = useRef<number | null>(null);
@@ -246,16 +193,8 @@ export default function HrvLivePage() {
    * Session lifecycle
    * ---------------------------------------------------------------- */
 
-  /**
-   * Clear everything that could carry across a session boundary.
-   *
-   * The previous version never emptied the RR buffer on connect, so beats from
-   * an earlier session — or from demo mode — stayed in the window and produced
-   * one enormous fabricated difference at the seam. Called on connect as well
-   * as on disconnect, deliberately.
-   */
   const resetSession = useCallback(() => {
-    engineRef.current.reset();
+    resetHrvState(hrvRef.current);
     lastPacketAtRef.current = null;
     lastPpiPacketAtRef.current = null;
     beatClockRef.current = null;
@@ -276,33 +215,6 @@ export default function HrvLivePage() {
     resetSession();
   }, [resetSession]);
 
-  const handleDeviceDisconnected = useCallback(
-    (event?: Event) => {
-      console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
-
-      console.error('[Polar] Device:', bluetoothDeviceRef.current?.name);
-
-      console.error('[Polar] GATT connected:', bluetoothDeviceRef.current?.gatt?.connected);
-
-      const device = (event?.target as any) ?? bluetoothDeviceRef.current;
-
-      if (device) {
-        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-      }
-
-      bluetoothDeviceRef.current = null;
-      characteristicRef.current = null;
-      pmdControlRef.current = null;
-      pmdDataRef.current = null;
-      lastPpiPacketAtRef.current = null;
-
-      teardownConnection();
-      startDemo();
-      setErrorMessage('POLAR DISCONNECTED — DEMO MODE ACTIVE');
-    },
-    [teardownConnection],
-  );
-
   /* ---------------------------------------------------------------- *
    * Beat handling
    * ---------------------------------------------------------------- */
@@ -314,33 +226,8 @@ export default function HrvLivePage() {
     setLogs((previous) => [withId, ...previous].slice(0, VISIBLE_LOG_ROWS));
   }, []);
 
-  /**
-   * A pair correction resolves a beat that was logged one beat ago as "held".
-   * Reach back and relabel it so the log tells the truth about what happened.
-   */
-  const relabelHeldEntry = useCallback((status: 'corrected' | 'rejected', used: number | null, note: string) => {
-    setLogs((previous) => {
-      const index = previous.findIndex((entry) => entry.status === 'held');
-      if (index === -1) return previous;
-
-      const next = [...previous];
-      next[index] = { ...next[index], status, used, note };
-
-      return next;
-    });
-  }, []);
-
-  const applyPendingResolution = useCallback(
-    (resolution: PendingResolution) => {
-      const resolvedTo = resolution.emitted[0];
-
-      relabelHeldEntry(resolution.disposition, resolvedTo === undefined ? null : Math.round(resolvedTo), correctionNote(resolution));
-    },
-    [relabelHeldEntry],
-  );
-
   const publish = useCallback((now: number) => {
-    const next = engineRef.current.snapshot(now);
+    const next = getSnapshot(hrvRef.current, now);
     recorderRef.current.addSample(next, now);
     setSnapshot(next);
 
@@ -353,64 +240,63 @@ export default function HrvLivePage() {
     }
   }, []);
 
+  /**
+   * One interval in, one row out. No holding, no lookahead, no latency —
+   * every beat is judged the moment it arrives and shown immediately.
+   */
   const ingestBeat = useCallback(
-    (rawRr: number, now: number, demo: boolean) => {
-      const event = engineRef.current.push(rawRr, now);
-      recorderRef.current.addBeat(event, now);
+    (rr: number, at: number, demo: boolean) => {
+      const beat: Beat = pushBeat(hrvRef.current, rr, at);
+
+      recorderRef.current.addBeat(beat, at);
       setRecordedBeats(recorderRef.current.beatCount);
 
-      const stamp = formatTimestamp(new Date(now));
-      const rounded = Math.round(rawRr);
+      appendLog({
+        timestamp: formatTimestamp(new Date(at)),
+        rr: Math.round(beat.rr),
+        bad: beat.bad,
+        reason: beat.reason,
+        demo,
+      });
 
-      // A beat held on a previous call has now been judged one way or another.
-      // Reach back and give it its verdict so nothing sits at "held" forever.
-      if (event.pendingResolution) {
-        applyPendingResolution(event.pendingResolution);
-      }
-
-      if (event.disposition === 'corrected') {
-        const used = event.emitted[0] ?? null;
-
-        // A pair correction consumes the beat that was held last time round.
-        if (event.correction === 'misplaced-pair' || event.correction === 'extra-beat') {
-          relabelHeldEntry('corrected', used === null ? rounded : Math.round(used), correctionNote(event));
-        }
-
-        appendLog({
-          timestamp: stamp,
-          raw: rounded,
-          used: used === null ? null : Math.round(used),
-          status: 'corrected',
-          note: correctionNote(event),
-          demo,
-        });
-      } else if (event.disposition === 'rejected') {
-        // correction 'none' means the beat is being held for one beat to see
-        // whether its partner arrives and completes a repairable pair.
-        const held = event.correction === 'none';
-
-        appendLog({
-          timestamp: stamp,
-          raw: rounded,
-          used: null,
-          status: held ? 'held' : 'rejected',
-          note: held ? 'FLAGGED — AWAITING NEXT BEAT' : correctionNote(event),
-          demo,
-        });
-      } else {
-        appendLog({
-          timestamp: stamp,
-          raw: rounded,
-          used: null,
-          status: 'ok',
-          note: '',
-          demo,
-        });
-      }
-
-      publish(now);
+      publish(at);
     },
-    [appendLog, applyPendingResolution, publish, relabelHeldEntry],
+    [appendLog, publish],
+  );
+
+  /**
+   * Give every beat its own timestamp, spaced by its own interval.
+   *
+   * A packet can carry several intervals, and packet arrival is up to half a
+   * second away from the beat it describes. Chain forward from the last beat
+   * and re-anchor only when the running clock has drifted; the re-anchor may
+   * never move backwards, which keeps the series strictly increasing.
+   */
+  const ingestIntervals = useCallback(
+    (intervals: number[], now: number, demo: boolean) => {
+      if (intervals.length === 0) return;
+
+      const spanMs = intervals.reduce((sum, value) => sum + value, 0);
+      const clock = beatClockRef.current;
+
+      let beatAt: number;
+
+      if (clock === null) {
+        beatAt = now - spanMs;
+      } else if (Math.abs(clock + spanMs - now) > BEAT_CLOCK_RESYNC_MS) {
+        beatAt = Math.max(now - spanMs, clock);
+      } else {
+        beatAt = clock;
+      }
+
+      for (const interval of intervals) {
+        beatAt += interval;
+        ingestBeat(interval, beatAt, demo);
+      }
+
+      beatClockRef.current = beatAt;
+    },
+    [ingestBeat],
   );
 
   const handleHeartRateMeasurement = useCallback(
@@ -429,96 +315,33 @@ export default function HrvLivePage() {
 
       setContactWarning(measurement.sensorContact === 'supported-no-contact');
 
-      // Packet-level gap detection. The recorded sessions contain real
-      // five-second holes; without this the beats either side of one get
-      // treated as consecutive.
       const lastPacketAt = lastPacketAtRef.current;
       const gapDetected = lastPacketAt !== null && now - lastPacketAt > PACKET_GAP_MS;
 
       if (gapDetected) {
         beatClockRef.current = null;
-        const resolution = engineRef.current.markGap();
-        if (resolution) applyPendingResolution(resolution);
       }
       lastPacketAtRef.current = now;
 
       recorderRef.current.addPacket(view, measurement.bpm, measurement.rrIntervals, measurement.sensorContact, gapDetected, now);
 
       if (measurement.rrIntervals.length === 0) {
-        // Heart rate without RR data — nothing to feed the engine, but the
-        // rate itself is still worth showing.
+        // Heart rate with no RR data — nothing to score, but worth showing.
         setSnapshot((current) => ({ ...current, heartRate: measurement.bpm }));
         return;
       }
 
-      /*
-       * Give every beat its OWN timestamp.
-       *
-       * The intervals themselves say when each beat happened. The last one
-       * ended at `now`; the one before it ended one interval earlier; and so
-       * on. Walking backwards from the packet's arrival reconstructs the true
-       * beat times, which are then strictly increasing and unique.
-       */
-      const intervals = measurement.rrIntervals;
-      const spanMs = intervals.reduce((sum, rr) => sum + rr, 0);
-
-      const clock = beatClockRef.current;
-      let beatAt: number;
-
-      if (clock === null) {
-        beatAt = now - spanMs;
-      } else if (Math.abs(clock + spanMs - now) > BEAT_CLOCK_RESYNC_MS) {
-        beatAt = Math.max(now - spanMs, clock); // re-anchor, never rewind
-      } else {
-        beatAt = clock;
-      }
-
-      for (const rr of intervals) {
-        beatAt += rr;
-        ingestBeat(rr, beatAt, false);
-      }
-
-      beatClockRef.current = beatAt;
+      ingestIntervals(measurement.rrIntervals, now, false);
     },
-    [applyPendingResolution, ingestBeat],
+    [ingestIntervals],
   );
 
   const handlePpiMeasurement = useCallback(
     (event: Event) => {
       const view = (event.target as any)?.value as DataView | undefined;
-
       if (!view || view.byteLength === 0) return;
 
-      ppiPacketCountRef.current += 1;
-
-      const elapsed = ppiStartedAtRef.current === null ? null : Date.now() - ppiStartedAtRef.current;
-
-      console.debug('[Verity Sense] PPI PACKET', {
-        packet: ppiPacketCountRef.current,
-        elapsedMs: elapsed,
-        size: view.byteLength,
-      });
-
-      const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-
-      console.debug(
-        '[Verity Sense] RAW PPI DATA:',
-        Array.from(bytes)
-          .map((byte) => byte.toString(16).padStart(2, '0'))
-          .join(' '),
-      );
-
       const samples = parsePpiMeasurement(view);
-
-      ppiSampleCountRef.current += samples.length;
-
-      console.debug('[Verity Sense] PPI TOTAL SAMPLES', {
-        packets: ppiPacketCountRef.current,
-        samples: ppiSampleCountRef.current,
-      });
-
-      console.debug('[Verity Sense] PARSED PPI SAMPLES:', samples.length, samples);
-
       if (samples.length === 0) return;
 
       const now = Date.now();
@@ -527,342 +350,46 @@ export default function HrvLivePage() {
 
       if (gapDetected) {
         beatClockRef.current = null;
-        const resolution = engineRef.current.markGap();
-        if (resolution) applyPendingResolution(resolution);
       }
-
       lastPpiPacketAtRef.current = now;
 
-      const validSamples = samples.filter((sample) => {
-        // Polar explicitly says blocker=1 means movement was detected and the
-        // sample must be discarded. If contact support is present, no-contact
-        // samples must also be discarded.
-        if (sample.blocker) return false;
-        if (sample.skinContactSupported && !sample.skinContact) return false;
-        if (!Number.isFinite(sample.ppIntervalMs)) return false;
-        return sample.ppIntervalMs >= DEFAULT_CONFIG.minRrMs && sample.ppIntervalMs <= DEFAULT_CONFIG.maxRrMs;
-      });
+      // Polar's own quality bits: blocker means movement was detected during
+      // the sample, and no-contact means the optical sensor was off the skin.
+      // These are the sensor's own verdict, not our rule, so they are applied
+      // before the interval ever reaches the filter.
+      const usable = samples.filter((sample) => !sample.blocker && !(sample.skinContactSupported && !sample.skinContact));
 
       const hasSupportedContact = samples.some((sample) => sample.skinContactSupported);
       const hasNoContact = samples.some((sample) => sample.skinContactSupported && !sample.skinContact);
       setContactWarning(hasSupportedContact && hasNoContact);
 
-      const bpmSamples = validSamples.filter((sample) => sample.heartRate > 0);
-      if (bpmSamples.length > 0) {
-        const averageHr = bpmSamples.reduce((sum, sample) => sum + sample.heartRate, 0) / bpmSamples.length;
-        setSnapshot((current) => ({
-          ...current,
-          heartRate: Math.round(averageHr),
-        }));
+      const withHr = usable.filter((sample) => sample.heartRate > 0);
+      const averageHr = withHr.length > 0 ? Math.round(withHr.reduce((sum, sample) => sum + sample.heartRate, 0) / withHr.length) : 0;
+
+      if (averageHr > 0) {
+        setSnapshot((current) => ({ ...current, heartRate: averageHr }));
       }
 
       recorderRef.current.addPacket(
         view,
-        bpmSamples.length > 0 ? Math.round(bpmSamples.reduce((sum, sample) => sum + sample.heartRate, 0) / bpmSamples.length) : 0,
+        averageHr,
         samples.map((sample) => sample.ppIntervalMs),
         hasNoContact ? 'supported-no-contact' : hasSupportedContact ? 'supported-contact' : 'unsupported',
         gapDetected,
         now,
       );
 
-      if (validSamples.length === 0) return;
-
-      /*
-       * PMD can batch several PPI samples into one notification. Reconstruct
-       * the beat times from the pulse intervals just like we do for H10 RR
-       * intervals. The last sample ends at `now`; earlier samples are walked
-       * backwards from there.
-       */
-      const intervals = validSamples.map((sample) => sample.ppIntervalMs);
-      const spanMs = intervals.reduce((sum, pp) => sum + pp, 0);
-
-      const clock = beatClockRef.current;
-      let beatAt: number;
-
-      if (clock === null) {
-        beatAt = now - spanMs;
-      } else if (Math.abs(clock + spanMs - now) > BEAT_CLOCK_RESYNC_MS) {
-        beatAt = Math.max(now - spanMs, clock);
-      } else {
-        beatAt = clock;
-      }
-
-      for (const pp of intervals) {
-        beatAt += pp;
-        ingestBeat(pp, beatAt, false);
-      }
-
-      beatClockRef.current = beatAt;
+      ingestIntervals(
+        usable.map((sample) => sample.ppIntervalMs),
+        now,
+        false,
+      );
     },
-    [applyPendingResolution, ingestBeat],
+    [ingestIntervals],
   );
 
   /* ---------------------------------------------------------------- *
-   * Bluetooth
-   * ---------------------------------------------------------------- */
-
-  const connectPolar = async () => {
-    setErrorMessage('');
-
-    stopDemo();
-
-    if (!(navigator as any).bluetooth) {
-      setErrorMessage('WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS');
-      return;
-    }
-
-    try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        // Use the device name for discovery. Verity Sense exposes the standard
-        // heart-rate service, but its HRV/PPI stream lives in Polar PMD.
-        filters: [{ namePrefix: 'Polar' }],
-        optionalServices: ['heart_rate', 'battery_service', 'device_information', POLAR_PMD_SERVICE_UUID],
-      });
-
-      // Wipe first. Whatever was in the buffers belongs to a different session.
-      resetSession();
-
-      bluetoothDeviceRef.current = device;
-      device.addEventListener('gattserverdisconnected', handleDeviceDisconnected);
-
-      const server = await device.gatt?.connect();
-      if (!server) throw new Error('GATT connect failed');
-
-      const name = device.name || 'POLAR DEVICE';
-      const isVerity = isVeritySenseDevice(name);
-
-      /*
-       * H10:
-       *   Standard Heart Rate service -> RR intervals.
-       *
-       * Verity Sense:
-       *   PMD PPI stream -> PPI intervals.
-       *
-       * Keep the two paths isolated while debugging Chrome/Verity Sense.
-       * Do not enable the standard HR notification on Verity Sense because
-       * its HRV source is the PMD PPI stream.
-       */
-      if (!isVerity) {
-        const service = await server.getPrimaryService('heart_rate');
-        const characteristic = await service.getCharacteristic('heart_rate_measurement');
-
-        console.debug('[Polar] Enabling standard HR notifications...');
-
-        await characteristic.startNotifications();
-
-        console.debug('[Polar] Standard HR notifications enabled');
-
-        characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
-
-        characteristicRef.current = characteristic;
-      }
-
-      // Start recording before enabling PMD so the first PPI notification can
-      // never arrive before the recorder has a session start time.
-      recorderRef.current.start('live', name, Date.now());
-
-      if (isVerity) {
-        console.debug('[Verity Sense] Starting PMD/PPI setup...');
-
-        const pmdService = await server.getPrimaryService(POLAR_PMD_SERVICE_UUID);
-        const pmdControl = await pmdService.getCharacteristic(POLAR_PMD_CONTROL_UUID);
-        const pmdData = await pmdService.getCharacteristic(POLAR_PMD_DATA_UUID);
-
-        console.debug('[Verity Sense] PMD characteristics found');
-        pmdControlRef.current = pmdControl;
-        pmdDataRef.current = pmdData;
-
-        /*
-         * PMD DATA
-         *
-         * Verity Sense sends PPI measurements here.
-         */
-        console.debug('[Verity Sense] Enabling PMD data notifications...');
-
-        await pmdData.startNotifications();
-
-        console.debug('[Verity Sense] PMD data notifications enabled');
-
-        pmdData.addEventListener('characteristicvaluechanged', handlePpiMeasurement);
-
-        /*
-         * PMD CONTROL
-         *
-         * The control characteristic uses indications.
-         */
-        console.debug('[Verity Sense] Enabling PMD control indications...');
-
-        await pmdControl.startNotifications();
-
-        console.debug('[Verity Sense] PMD control indications enabled');
-
-        const handlePmdControl = (event: Event) => {
-          const controlView = (event.target as any)?.value as DataView | undefined;
-
-          if (!controlView || controlView.byteLength === 0) {
-            return;
-          }
-
-          const bytes = new Uint8Array(controlView.buffer, controlView.byteOffset, controlView.byteLength);
-
-          const hex = Array.from(bytes)
-            .map((byte) => byte.toString(16).padStart(2, '0'))
-            .join(' ');
-
-          console.debug('[Verity Sense] PMD CONTROL RESPONSE:', {
-            length: controlView.byteLength,
-            hex,
-            bytes: Array.from(bytes),
-          });
-        };
-
-        pmdControl.addEventListener('characteristicvaluechanged', handlePmdControl);
-
-        try {
-          /*
-           * ---------------------------------------------------------
-           * PPI START
-           * ---------------------------------------------------------
-           *
-           * IMPORTANT:
-           * PPI does NOT use the stream-settings payload.
-           *
-           * Polar's startPpiStreaming() API takes only the device ID.
-           *
-           * Raw PMD command:
-           *
-           *   0x02 = REQUEST_MEASUREMENT_START
-           *   0x03 = PPI
-           */
-          console.debug('[Verity Sense] Sending PPI start command...');
-
-          const ppiStartCommand = new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]);
-
-          console.debug(
-            '[Verity Sense] PPI START COMMAND:',
-            Array.from(ppiStartCommand)
-              .map((byte) => byte.toString(16).padStart(2, '0'))
-              .join(' '),
-          );
-
-          /*
-           * IMPORTANT:
-           *
-           * Use writeValue() here.
-           *
-           * This matches the raw BLE approach shown in Polar's
-           * own GitHub discussion for PPI.
-           */
-          ppiPacketCountRef.current = 0;
-          ppiSampleCountRef.current = 0;
-          ppiStartedAtRef.current = Date.now();
-
-          await pmdControl.writeValue(ppiStartCommand);
-
-          console.debug('[Verity Sense] PPI start command sent successfully');
-
-          console.debug('[Verity Sense] Connection immediately after PPI start:', device.gatt?.connected);
-
-          /*
-           * PPI has a startup delay.
-           *
-           * Do NOT assume "no PPI data yet" means failure.
-           * We will let the notification listener remain active.
-           */
-        } catch (error) {
-          console.error('[Verity Sense] PPI startup failed:', error);
-
-          throw error;
-        }
-      }
-
-      setConnected(true);
-      setDemoMode(false);
-      setDeviceName(name);
-
-      if (isVerity) {
-        setErrorMessage('');
-      }
-    } catch (error) {
-      console.log('==Catch error', error);
-      console.error(error);
-
-      const device = bluetoothDeviceRef.current;
-      if (device) device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-
-      if (characteristicRef.current) {
-        characteristicRef.current.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
-      }
-
-      if (pmdDataRef.current) {
-        pmdDataRef.current.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
-      }
-
-      if (device?.gatt?.connected) {
-        try {
-          device.gatt.disconnect();
-        } catch {
-          // Best-effort cleanup; the original connection error is more useful.
-        }
-      }
-
-      bluetoothDeviceRef.current = null;
-      characteristicRef.current = null;
-      pmdControlRef.current = null;
-      pmdDataRef.current = null;
-      lastPpiPacketAtRef.current = null;
-      resetSession();
-
-      setConnected(false);
-      setErrorMessage(
-        error instanceof Error && error.name === 'NotFoundError'
-          ? 'NO DEVICE SELECTED'
-          : error instanceof Error && error.message.includes('Verity Sense')
-            ? error.message
-            : 'CONNECTION FAILED — CHECK THE POLAR DEVICE IS ON, WORN, AND NOT CONNECTED TO ANOTHER APP',
-      );
-      startDemo();
-    }
-  };
-
-  const disconnectPolar = () => {
-    const device = bluetoothDeviceRef.current;
-    const characteristic = characteristicRef.current;
-    const pmdControl = pmdControlRef.current;
-    const pmdData = pmdDataRef.current;
-
-    try {
-      if (characteristic) {
-        characteristic.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
-      }
-
-      if (pmdData) {
-        pmdData.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
-      }
-
-      if (device) {
-        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
-        if (device.gatt?.connected) device.gatt.disconnect();
-      }
-    } catch (error) {
-      console.error('Bluetooth disconnect error:', error);
-    } finally {
-      bluetoothDeviceRef.current = null;
-      characteristicRef.current = null;
-      pmdControlRef.current = null;
-      pmdDataRef.current = null;
-      lastPpiPacketAtRef.current = null;
-      teardownConnection();
-      startDemo();
-    }
-  };
-
-  /* ---------------------------------------------------------------- *
    * Demo mode
-   *
-   * Clearly labelled as simulated, and deliberately injects the same class of
-   * artifact the real device produces so the filter can be seen working. Safe
-   * to delete outright — nothing else depends on it.
    * ---------------------------------------------------------------- */
 
   const demoStateRef = useRef({ phase: 0, beatsUntilArtifact: 25 });
@@ -883,29 +410,21 @@ export default function HrvLivePage() {
     if (state.beatsUntilArtifact <= 0) {
       state.beatsUntilArtifact = 20 + Math.floor(Math.random() * 25);
 
-      // A misplaced detection: elapsed time is preserved across the pair,
-      // exactly as observed in the recorded H10 logs.
+      // A misplaced detection: one beat too short, the next too long, total
+      // elapsed time preserved — the shape the real sensors actually produce.
       const shift = 180 + Math.random() * 120;
-      ingestBeat(rr - shift, now, true);
-      ingestBeat(rr + shift, now, true);
+      ingestIntervals([rr - shift, rr + shift], now, true);
       return;
     }
 
-    ingestBeat(rr, now, true);
-  }, [ingestBeat]);
+    ingestIntervals([rr], now, true);
+  }, [ingestIntervals]);
 
   const startDemo = useCallback(() => {
-    if (simulationRef.current) {
-      clearInterval(simulationRef.current);
-    }
+    if (simulationRef.current) clearInterval(simulationRef.current);
 
     resetSession();
-
-    demoStateRef.current = {
-      phase: 0,
-      beatsUntilArtifact: 25,
-    };
-
+    demoStateRef.current = { phase: 0, beatsUntilArtifact: 25 };
     recorderRef.current.start('demo', 'SIMULATED DEVICE', Date.now());
 
     setDemoMode(true);
@@ -913,9 +432,7 @@ export default function HrvLivePage() {
     setDeviceName('DEMO — SIMULATED DEVICE');
     setErrorMessage('');
 
-    // Immediately create the first reading instead of waiting 900ms.
     pushSimulatedReading();
-
     simulationRef.current = setInterval(pushSimulatedReading, 900);
   }, [pushSimulatedReading, resetSession]);
 
@@ -924,9 +441,164 @@ export default function HrvLivePage() {
       clearInterval(simulationRef.current);
       simulationRef.current = null;
     }
-
     setDemoMode(false);
   }, []);
+
+  const handleDeviceDisconnected = useCallback(
+    (event?: Event) => {
+      console.error('[Polar] GATT DISCONNECTED at', new Date().toISOString());
+
+      const device = (event?.target as any) ?? bluetoothDeviceRef.current;
+      if (device) device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
+      bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
+
+      teardownConnection();
+      startDemo();
+      setErrorMessage('POLAR DISCONNECTED — DEMO MODE ACTIVE');
+    },
+    [startDemo, teardownConnection],
+  );
+
+  /* ---------------------------------------------------------------- *
+   * Bluetooth
+   * ---------------------------------------------------------------- */
+
+  const connectPolar = async () => {
+    setErrorMessage('');
+    stopDemo();
+
+    if (!(navigator as any).bluetooth) {
+      setErrorMessage('WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS');
+      return;
+    }
+
+    try {
+      const device = await (navigator as any).bluetooth.requestDevice({
+        filters: [{ namePrefix: 'Polar' }],
+        optionalServices: ['heart_rate', 'battery_service', 'device_information', POLAR_PMD_SERVICE_UUID],
+      });
+
+      resetSession();
+
+      bluetoothDeviceRef.current = device;
+      device.addEventListener('gattserverdisconnected', handleDeviceDisconnected);
+
+      const server = await device.gatt?.connect();
+      if (!server) throw new Error('GATT connect failed');
+
+      const name = device.name || 'POLAR DEVICE';
+      const isVerity = isVeritySenseDevice(name);
+
+      if (!isVerity) {
+        const service = await server.getPrimaryService('heart_rate');
+        const characteristic = await service.getCharacteristic('heart_rate_measurement');
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+        characteristicRef.current = characteristic;
+      }
+
+      recorderRef.current.start('live', name, Date.now());
+
+      if (isVerity) {
+        const pmdService = await server.getPrimaryService(POLAR_PMD_SERVICE_UUID);
+        const pmdControl = await pmdService.getCharacteristic(POLAR_PMD_CONTROL_UUID);
+        const pmdData = await pmdService.getCharacteristic(POLAR_PMD_DATA_UUID);
+
+        pmdControlRef.current = pmdControl;
+        pmdDataRef.current = pmdData;
+
+        await pmdData.startNotifications();
+        pmdData.addEventListener('characteristicvaluechanged', handlePpiMeasurement);
+
+        await pmdControl.startNotifications();
+        pmdControl.addEventListener('characteristicvaluechanged', (controlEvent: Event) => {
+          const controlView = (controlEvent.target as any)?.value as DataView | undefined;
+          if (!controlView || controlView.byteLength === 0) return;
+
+          const bytes = new Uint8Array(controlView.buffer, controlView.byteOffset, controlView.byteLength);
+          console.debug(
+            '[Verity Sense] PMD CONTROL RESPONSE:',
+            Array.from(bytes)
+              .map((byte) => byte.toString(16).padStart(2, '0'))
+              .join(' '),
+          );
+        });
+
+        await pmdControl.writeValue(new Uint8Array([PMD_REQUEST_MEASUREMENT_START, PMD_MEASUREMENT_PPI]));
+        console.debug('[Verity Sense] PPI start command sent — first data can take ~25s');
+      }
+
+      setConnected(true);
+      setDemoMode(false);
+      setDeviceName(name);
+    } catch (error) {
+      console.error(error);
+
+      const device = bluetoothDeviceRef.current;
+      if (device) device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+      if (characteristicRef.current) {
+        characteristicRef.current.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+      }
+      if (pmdDataRef.current) {
+        pmdDataRef.current.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
+      }
+      if (device?.gatt?.connected) {
+        try {
+          device.gatt.disconnect();
+        } catch {
+          // Best-effort cleanup; the original error is more useful.
+        }
+      }
+
+      bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
+      resetSession();
+
+      setConnected(false);
+      setErrorMessage(
+        error instanceof Error && error.name === 'NotFoundError'
+          ? 'NO DEVICE SELECTED'
+          : 'CONNECTION FAILED — CHECK THE POLAR DEVICE IS ON, WORN, AND NOT CONNECTED TO ANOTHER APP',
+      );
+      startDemo();
+    }
+  };
+
+  const disconnectPolar = () => {
+    const device = bluetoothDeviceRef.current;
+
+    try {
+      if (characteristicRef.current) {
+        characteristicRef.current.removeEventListener('characteristicvaluechanged', handleHeartRateMeasurement);
+      }
+      if (pmdDataRef.current) {
+        pmdDataRef.current.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
+      }
+      if (device) {
+        device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
+        if (device.gatt?.connected) device.gatt.disconnect();
+      }
+    } catch (error) {
+      console.error('Bluetooth disconnect error:', error);
+    } finally {
+      bluetoothDeviceRef.current = null;
+      characteristicRef.current = null;
+      pmdControlRef.current = null;
+      pmdDataRef.current = null;
+      lastPpiPacketAtRef.current = null;
+      teardownConnection();
+      startDemo();
+    }
+  };
 
   useEffect(() => {
     startDemo();
@@ -937,23 +609,27 @@ export default function HrvLivePage() {
         simulationRef.current = null;
       }
     };
-  }, [startDemo]);
+    // Deliberately once, on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---------------------------------------------------------------- *
+   * Session export
+   * ---------------------------------------------------------------- */
 
   const exportRecording = useCallback(() => {
     const recorder = recorderRef.current;
 
     if (recorder.isEmpty) {
-      setExportNote('NOTHING RECORDED YET — CONNECT AND WEAR THE STRAP FIRST');
+      setExportNote('NOTHING RECORDED YET — CONNECT AND WEAR THE SENSOR FIRST');
       return;
     }
 
-    // Build synchronously and hand straight to saveRecording. On iPadOS the
-    // share sheet may only open while the tap that triggered it is still the
-    // live user gesture, and any await before that point forfeits it.
-    const recording = recorder.build(APP_VERSION, DEFAULT_CONFIG, Date.now());
+    // Build synchronously. On iPadOS the share sheet only opens while the tap
+    // is still the live user gesture; any await before it forfeits that.
+    const recording = recorder.build(APP_VERSION, HRV_CONFIG, Date.now());
     const stats =
-      `${recording.summary.beats} BEATS, ${Math.round(recording.durationMs / 1000)}s, ` +
-      `${recording.summary.corrected} CORRECTED, ${recording.summary.rejected} REJECTED`;
+      `${recording.summary.beats} BEATS, ${Math.round(recording.durationMs / 1000)}s, ` + `${recording.summary.flagged} FLAGGED`;
 
     setExportNote('PREPARING SESSION LOG...');
 
@@ -975,7 +651,7 @@ export default function HrvLivePage() {
             setExportNote('SAVE CANCELLED');
             break;
           default:
-            setExportNote(`COULD NOT SAVE — ${outcome.reason}. TRY "COPY LOG" INSTEAD.`);
+            setExportNote(`COULD NOT SAVE — ${outcome.reason}`);
         }
       })
       .catch((error) => {
@@ -1015,9 +691,6 @@ export default function HrvLivePage() {
       const padBottom = 14;
       const usableHeight = height - padTop - padBottom;
 
-      // Auto-scaled. The previous version was hard-capped at 100ms, so every
-      // inflated reading drew as a flat line across the top of the panel —
-      // which is what the straight green line in the screenshots actually was.
       const peak = traceData.length > 0 ? Math.max(...traceData) : 0;
       const scaleMax = niceCeiling(Math.max(peak * 1.15, 50));
 
@@ -1036,7 +709,6 @@ export default function HrvLivePage() {
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
         ctx.stroke();
-
         ctx.fillText(`${Math.round(mark)}`, 2, y - 2);
       }
 
@@ -1091,26 +763,13 @@ export default function HrvLivePage() {
 
   useEffect(() => {
     return () => {
-      if (simulationRef.current) {
-        clearInterval(simulationRef.current);
-        simulationRef.current = null;
-      }
-
       const device = bluetoothDeviceRef.current;
-      const pmdData = pmdDataRef.current;
-
-      if (pmdData) {
-        pmdData.removeEventListener('characteristicvaluechanged', handlePpiMeasurement);
-      }
 
       if (device) {
         device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
         if (device.gatt?.connected) device.gatt.disconnect();
         bluetoothDeviceRef.current = null;
       }
-
-      pmdControlRef.current = null;
-      pmdDataRef.current = null;
     };
   }, [handleDeviceDisconnected]);
 
@@ -1118,24 +777,18 @@ export default function HrvLivePage() {
    * Derived display state
    * ---------------------------------------------------------------- */
 
-  const { rmssd, sdnn, pnn50, avgRmssd60s, heartRate, quality, artifactRate } = snapshot;
+  const { rmssd, sdnn, pnn50, avgRmssd60s, heartRate, artifactRate, ready } = snapshot;
 
-  // Keep a fixed set of visible DOM rows. This avoids continuously prepending
-  // and removing DOM nodes, which can cause stale painting on iPadOS/Bluefy.
+  const signalLabel = qualityLabel(artifactRate, ready);
+  const signalClass = qualityClass(artifactRate, ready);
+
+  // Fixed set of visible rows, so nothing is inserted into or removed from the
+  // DOM as beats arrive.
   const visibleLogs = Array.from({ length: VISIBLE_LOG_ROWS }, (_, index) => logs[index] ?? null);
 
-  /**
-   * What the headline reads.
-   *
-   * The old version reported "STRONG RECOVERY" for anything at or above 40ms,
-   * which meant an artifact-inflated 134ms displayed as excellent recovery in
-   * green — the screen was most confident exactly when it was most wrong.
-   * Nothing is claimed here unless the engine says the data supports it.
-   */
   const status = (() => {
     if (!connected) return 'AWAITING SIGNAL';
-    if (contactWarning) return 'NO SKIN CONTACT — WET THE STRAP';
-    if (quality === 'poor') return 'SIGNAL POOR — ADJUST STRAP, SIT STILL';
+    if (contactWarning) return 'NO SKIN CONTACT — CHECK THE SENSOR';
     if (rmssd === null) return 'ACQUIRING CLEAN BEATS...';
     if (rmssd < 20) return 'LOW HRV — ELEVATED STRESS';
     if (rmssd < 40) return 'NOMINAL';
@@ -1144,14 +797,13 @@ export default function HrvLivePage() {
 
   const statusClass = (() => {
     if (!connected || rmssd === null) return 'tk-yellow';
-    if (contactWarning || quality === 'poor') return 'tk-red';
+    if (contactWarning) return 'tk-red';
     if (rmssd < 20) return 'tk-red';
     if (rmssd < 40) return 'tk-yellow';
     return 'tk-green';
   })();
 
   const num = (value: number | null, digits = 1) => (value !== null ? value.toFixed(digits) : '--');
-  const artifactsTouched = snapshot.beatsCorrected + snapshot.beatsRejected;
 
   /* ---------------------------------------------------------------- *
    * Render
@@ -1169,7 +821,7 @@ export default function HrvLivePage() {
           </b>
         </div>
 
-        <div>SYS_VER: 2.0.0 &nbsp;&nbsp; ACCESS: FREE</div>
+        <div>SYS_VER: {APP_VERSION} &nbsp;&nbsp; ACCESS: FREE</div>
       </div>
 
       <div className="ticker-tape">
@@ -1178,7 +830,7 @@ export default function HrvLivePage() {
           &nbsp;|&nbsp; RMSSD &lt;GO&gt; <span className="tk-white">{num(rmssd)} MS</span>
           &nbsp;|&nbsp; SDNN &lt;GO&gt; <span className="tk-cyan">{num(sdnn)} MS</span>
           &nbsp;|&nbsp; pNN50 &lt;GO&gt; <span className="tk-cyan">{num(pnn50)} %</span>
-          &nbsp;|&nbsp; SIGNAL &lt;GO&gt; <span className={QUALITY_CLASS[quality]}>{QUALITY_LABEL[quality]}</span>
+          &nbsp;|&nbsp; SIGNAL &lt;GO&gt; <span className={signalClass}>{signalLabel}</span>
           &nbsp;|&nbsp; STATUS &lt;GO&gt; <span className={statusClass}>{status}</span>
           &nbsp;|&nbsp; HR &lt;GO&gt; <span className="tk-white">{heartRate ?? '--'} BPM</span>
           &nbsp;|&nbsp; RMSSD &lt;GO&gt; <span className="tk-white">{num(rmssd)} MS</span>
@@ -1220,16 +872,16 @@ export default function HrvLivePage() {
 
             {connected ? (
               <div className="source-stats">
-                SIGNAL <span className={QUALITY_CLASS[quality]}>{QUALITY_LABEL[quality]}</span>
+                SIGNAL <span className={signalClass}>{signalLabel}</span>
                 <br />
-                {artifactsTouched} / {snapshot.beatsSeen} BEATS FILTERED
+                {snapshot.beatsFlagged} / {snapshot.beatsSeen} BEATS FLAGGED
                 <br />
                 <span className="tk-red">REC</span> {recordedBeats.toLocaleString()} LOGGED
               </div>
             ) : null}
 
             <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
-              {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect POLAR H10 Heart Rate Sensor'}
+              {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Heart Rate Sensor'}
             </button>
           </div>
 
@@ -1246,7 +898,7 @@ export default function HrvLivePage() {
               <div className="gauge-block">
                 <div className="gauge-label">HRV (RMSSD)</div>
                 <div className="gauge-value">[{rmssd !== null ? ` ${rmssd.toFixed(1)} ` : ' -- '}]</div>
-                <div className="gauge-label">{rmssd !== null ? 'MILLISECONDS' : quality === 'poor' ? 'SIGNAL TOO NOISY' : 'ACQUIRING'}</div>
+                <div className="gauge-label">{rmssd !== null ? 'MILLISECONDS' : 'ACQUIRING'}</div>
               </div>
             </div>
 
@@ -1267,6 +919,7 @@ export default function HrvLivePage() {
                   <span className="wl-val tk-yellow">{avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}</span>
                 </div>
               </div>
+
               <div>
                 <div className="wl-row">
                   <span className="wl-label">DELTA vs PREV</span>
@@ -1277,15 +930,15 @@ export default function HrvLivePage() {
 
                 <div className="wl-row">
                   <span className="wl-label">SIGNAL QUALITY</span>
-                  <span className={`wl-val ${QUALITY_CLASS[quality]}`}>
-                    {QUALITY_LABEL[quality]} · {(artifactRate * 100).toFixed(1)}% FILTERED
+                  <span className={`wl-val ${signalClass}`}>
+                    {signalLabel} · {(artifactRate * 100).toFixed(0)}% FLAGGED
                   </span>
                 </div>
 
                 <div className="wl-row">
-                  <span className="wl-label">CLEAN INTERVALS</span>
+                  <span className="wl-label">GOOD BEATS</span>
                   <span className="wl-val tk-cyan">
-                    {snapshot.cleanWindowSize} / {VISIBLE_LOG_ROWS}
+                    {snapshot.goodBeats} / {snapshot.windowSize}
                   </span>
                 </div>
               </div>
@@ -1300,13 +953,11 @@ export default function HrvLivePage() {
             <div className="panel-title">RR INTERVAL HISTORY LOG</div>
 
             <div className="log-stream">
-              {' '}
-              {/* ref removed */}
               {logs.length === 0 ? (
                 <>
                   <div className="log-line">SYSTEM STATUS: IDLE...</div>
                   <div className="log-line">PORT SCAN OPEN: WEB_BLUETOOTH CHANNELS READY</div>
-                  <div className="log-line">ARTIFACT FILTER: ARMED</div>
+                  <div className="log-line">ARTIFACT FLAGGING: ARMED</div>
                   <div className="log-line">AWAITING POLAR PACKETS...</div>
                 </>
               ) : (
@@ -1315,12 +966,9 @@ export default function HrvLivePage() {
                     {log ? (
                       <>
                         <span>{log.timestamp}</span>
-                        <span className={STATUS_CLASS[log.status]}>
-                          {STATUS_MARK[log.status]} RR={log.raw}ms
-                          {log.used !== null && log.used !== log.raw ? ` -> ${log.used}ms` : ''}
+                        <span className={log.bad ? 'tk-red' : 'tk-green'}>
+                          RR={log.rr}ms{log.bad ? '*' : ' '}
                         </span>
-                        {log.note ? <span className="tk-yellow"> {log.note}</span> : null}
-                        {log.demo ? ' (demo)' : ''}
                       </>
                     ) : null}
                   </div>
