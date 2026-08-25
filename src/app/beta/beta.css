@@ -42,11 +42,9 @@
 }
 .hrv-live {
   width: 100%;
-  height: 100dvh;
+  height: calc(100dvh - 30px);
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  /* -webkit-overflow-scrolling: touch; */
+  overflow: hidden;
   align-content: center;
 }
 .terminal-header {
@@ -60,7 +58,7 @@
 .terminal-header b {
   color: #fff;
   &.demo-mode {
-    color: red;
+    color: var(--red-alert);
   }
 }
 
@@ -75,7 +73,6 @@
   width: 100%;
   overflow-x: auto;
   overflow-y: visible;
-  /* -webkit-overflow-scrolling: touch; */
 }
 
 .panel {
@@ -122,9 +119,8 @@
   letter-spacing: 1px;
   text-transform: uppercase;
   text-shadow: 0 0 4px rgba(255, 42, 42, 0.4);
-  &.alert-red {
-    color: red;
-  }
+  color: var(--red-alert);
+  text-align: center;
 }
 @keyframes pulse {
   0% {
@@ -207,14 +203,7 @@
   color: var(--dim-orange);
 }
 
-/*
- * iPadOS / Bluefy stability:
- * Keep the ledger as a fixed-height, non-scrolling flex child. The UI already
- * renders only VISIBLE_LOG_ROWS, so a nested scrolling layer is unnecessary.
- */
 .ledger-box {
-  /* height: 400px;
-  max-height: 400px; */
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -372,12 +361,6 @@
     height: 140px;
   }
 
-  /* .ledger-box {
-    height: 420px;
-    max-height: 420px;
-    min-height: 0;
-  } */
-
   .log-stream {
     font-size: 11px;
     line-height: 17px;
@@ -412,6 +395,12 @@
 @media (max-width: 700px) {
   body {
     padding: 10px;
+  }
+
+  .hrv-live {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
 
   .workspace-scroll {

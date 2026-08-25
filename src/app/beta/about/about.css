@@ -1,0 +1,179 @@
+.about-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--orange);
+  font-family: 'Courier New', monospace;
+  line-height: 1.7;
+}
+
+.about-page *,
+.about-page *::before,
+.about-page *::after {
+  box-sizing: border-box;
+}
+
+.about-wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 50px 24px 100px;
+}
+
+/* Header */
+
+.about-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  border-bottom: 1px solid var(--dim-orange);
+  padding-bottom: 14px;
+  margin-bottom: 40px;
+}
+
+.about-header a {
+  color: var(--orange);
+  text-decoration: none;
+}
+
+.about-header a:hover {
+  text-decoration: underline;
+}
+
+/* Kicker */
+
+.about-kicker {
+  color: var(--dim-orange);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+/* Typography */
+
+.about-page h1 {
+  font-size: 26px;
+  color: #fff;
+  margin: 0 0 24px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.about-page h2 {
+  color: #fff;
+  font-size: 16px;
+  margin: 38px 0 12px;
+  border-left: 3px solid var(--orange);
+  padding-left: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.4;
+}
+
+.about-page p {
+  margin: 0 0 14px;
+  color: #d8b98a;
+  font-size: 14.5px;
+}
+
+.about-page p.about-lede {
+  color: var(--orange);
+  font-size: 16px;
+}
+
+/* Beta */
+
+.beta-box {
+  border: 1px solid var(--dim-orange);
+  padding: 18px 20px;
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.beta-box p {
+  margin-bottom: 0;
+}
+
+.beta-price {
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.beta-note {
+  color: var(--dim-orange);
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+
+/* Signoff */
+
+.about-signoff {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--dim-orange);
+  font-size: 13.5px;
+  color: var(--dim-orange);
+}
+
+.about-signoff a {
+  color: var(--orange);
+  text-decoration: none;
+}
+
+.about-signoff a:hover {
+  text-decoration: underline;
+}
+
+/* Disclaimer */
+
+.about-disclaimer {
+  margin-top: 36px;
+  font-size: 11.5px;
+  color: #5c3d1f;
+  border: 1px dashed #3a2a10;
+  padding: 14px 16px;
+}
+
+.about-disclaimer p {
+  color: #5c3d1f;
+  font-size: 11.5px;
+  margin-bottom: 8px;
+}
+
+.about-disclaimer p:last-child {
+  margin-bottom: 0;
+}
+
+.about-disclaimer strong {
+  color: #5c3d1f;
+}
+
+/* Mobile */
+
+@media (max-width: 600px) {
+  .about-wrap {
+    padding: 30px 18px 70px;
+  }
+
+  .about-header {
+    font-size: 12px;
+    gap: 15px;
+  }
+
+  .about-page h1 {
+    font-size: 23px;
+  }
+
+  .about-page p.about-lede {
+    font-size: 15px;
+  }
+
+  .beta-box {
+    padding: 16px;
+  }
+
+  .beta-price {
+    font-size: 18px;
+  }
+}
