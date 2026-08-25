@@ -819,19 +819,24 @@ export default function HrvLivePage() {
     router.push('/beta/poincare-live');
   };
 
+  const handleNavigateToBreathingRate = () => {
+    router.push('/beta/hrv-breathing-live');
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F1') {
         event.preventDefault();
         handleNavigateToAbout();
-      }
-      if (event.key === 'F2') {
+      } else if (event.key === 'F2') {
         event.preventDefault();
         handleNavigateToDevices();
-      }
-      if (event.key === 'F3') {
+      } else if (event.key === 'F3') {
         event.preventDefault();
         handleNavigateToPoincare();
+      } else if (event.key === 'F4') {
+        event.preventDefault();
+        handleNavigateToBreathingRate();
       }
     };
 
@@ -1028,7 +1033,7 @@ export default function HrvLivePage() {
             ['F1', 'ABOUT', handleNavigateToAbout],
             ['F2', 'DEVICES', handleNavigateToDevices],
             ['F3', 'POINCARE', handleNavigateToPoincare],
-            ['F4', 'TREND', null],
+            ['F4', 'BREATHING RATE', handleNavigateToBreathingRate],
             ['F5', 'LOG EXPORT', exportRecording],
             ['F6', 'GLUCOSELIVE', null],
             ['F7', 'SETTINGS', null],

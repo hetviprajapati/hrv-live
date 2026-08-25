@@ -90,7 +90,7 @@
 
 .poincare-panel {
   border: 1px solid var(--dim-orange);
-  background: var(--poincare-panel);
+  background: var(--panel);
   padding: 18px;
 }
 

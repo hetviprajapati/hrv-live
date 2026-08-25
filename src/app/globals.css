@@ -8,7 +8,9 @@
   --bbg-yellow: #ffe14d;
   --bbg-green: #3dff6e;
   --bbg-white: #f0f0f0;
-  --poincare-panel: #050505;
+  --panel: #050505;
+  --teal: #2dd9c8;
+  --dim-teal: #1a7a6f;
 }
 * {
   margin: 0;

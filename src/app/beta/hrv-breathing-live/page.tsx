@@ -556,7 +556,7 @@ export default function LiveHrvBreathingPage() {
   // ---------------------------------------------------------
 
   return (
-    <div className="wrap">
+    <div className="breathing-live-wrap">
       {/* HEADER */}
 
       <header>
