@@ -815,6 +815,10 @@ export default function HrvLivePage() {
     router.push('/beta/devices');
   };
 
+  const handleNavigateToPoincare = () => {
+    router.push('/beta/poincare-live');
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F1') {
@@ -824,6 +828,10 @@ export default function HrvLivePage() {
       if (event.key === 'F2') {
         event.preventDefault();
         handleNavigateToDevices();
+      }
+      if (event.key === 'F3') {
+        event.preventDefault();
+        handleNavigateToPoincare();
       }
     };
 
@@ -1019,7 +1027,7 @@ export default function HrvLivePage() {
           [
             ['F1', 'ABOUT', handleNavigateToAbout],
             ['F2', 'DEVICES', handleNavigateToDevices],
-            ['F3', 'ALERT SET', null],
+            ['F3', 'Poincare', handleNavigateToPoincare],
             ['F4', 'TREND', null],
             ['F5', 'LOG EXPORT', exportRecording],
             ['F6', 'GLUCOSELIVE', null],
