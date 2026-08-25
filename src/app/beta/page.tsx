@@ -811,11 +811,19 @@ export default function HrvLivePage() {
     router.push('/beta/about');
   };
 
+  const handleNavigateToDevices = () => {
+    router.push('/beta/devices');
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F1') {
         event.preventDefault();
         handleNavigateToAbout();
+      }
+      if (event.key === 'F2') {
+        event.preventDefault();
+        handleNavigateToDevices();
       }
     };
 
@@ -904,6 +912,12 @@ export default function HrvLivePage() {
             <button className="action-btn" onClick={connected && !demoMode ? disconnectPolar : connectPolar}>
               {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Heart Rate Sensor'}
             </button>
+
+            <div className="other-device">
+              <button type="button" onClick={handleNavigateToDevices} className="other-device-button">
+                Other devices?
+              </button>
+            </div>
           </div>
 
           <div className="panel">
@@ -1004,7 +1018,7 @@ export default function HrvLivePage() {
         {(
           [
             ['F1', 'ABOUT', handleNavigateToAbout],
-            ['F2', 'ANALYZE', null],
+            ['F2', 'DEVICES', handleNavigateToDevices],
             ['F3', 'ALERT SET', null],
             ['F4', 'TREND', null],
             ['F5', 'LOG EXPORT', exportRecording],
