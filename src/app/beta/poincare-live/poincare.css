@@ -1,0 +1,336 @@
+.poincare-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--orange);
+  line-height: 1.6;
+}
+
+.poincare-page *,
+.poincare-page *::before,
+.poincare-page *::after {
+  box-sizing: border-box;
+}
+
+.poincare-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+
+/* ---------------------------------------------------------
+   HEADER
+--------------------------------------------------------- */
+
+.poincare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--dim-orange);
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.poincare-brand {
+  color: #fff;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.poincare-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.poincare-header nav a {
+  color: var(--orange);
+  text-decoration: none;
+}
+
+.poincare-header nav a:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------
+   HERO
+--------------------------------------------------------- */
+
+.poincare-hero {
+  padding: 36px 0 20px;
+  text-align: center;
+}
+
+.poincare-hero h1 {
+  color: #fff;
+  font-size: 26px;
+  line-height: 1.35;
+  margin: 0 0 10px;
+}
+
+.poincare-sub {
+  color: var(--orange);
+  opacity: 0.85;
+  font-size: 14.5px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ---------------------------------------------------------
+   MAIN STAGE
+--------------------------------------------------------- */
+
+.poincare-stage {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.poincare-panel {
+  border: 1px solid var(--dim-orange);
+  background: var(--poincare-panel);
+  padding: 18px;
+}
+
+.poincare-panel-title {
+  font-size: 12px;
+  font-weight: bold;
+  background: var(--orange);
+  color: #000;
+  padding: 3px 8px;
+  display: inline-block;
+  margin-bottom: 14px;
+  letter-spacing: 1px;
+}
+
+/* ---------------------------------------------------------
+   PLOT
+--------------------------------------------------------- */
+
+.plot-wrapper {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #020202;
+  border: 1px solid #222;
+  position: relative;
+}
+
+.plot-wrapper canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.axis-label {
+  font-size: 11px;
+  color: var(--dim-orange);
+  text-align: center;
+  margin-top: 6px;
+}
+
+/* ---------------------------------------------------------
+   STATS
+--------------------------------------------------------- */
+
+.stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stat-block {
+  border: 1px dashed var(--dim-orange);
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--dim-orange);
+  letter-spacing: 1px;
+}
+
+.stat-value {
+  font-size: 26px;
+  color: #fff;
+  margin: 4px 0;
+}
+
+.quality-row {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--dim-orange);
+  margin-top: 4px;
+}
+
+/* ---------------------------------------------------------
+   BUTTON
+--------------------------------------------------------- */
+
+.poincare-btn {
+  background: var(--orange);
+  color: #000;
+  border: none;
+  font-family: inherit;
+  font-weight: bold;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-size: 13px;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.poincare-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.status-line {
+  font-size: 11px;
+  color: var(--dim-orange);
+  margin-top: -3px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ---------------------------------------------------------
+   EXPLAINER
+--------------------------------------------------------- */
+
+.explainer {
+  margin-top: 26px;
+  padding: 16px 20px;
+  background: #0a0a0a;
+  border: 1px solid var(--dim-orange);
+  font-size: 13px;
+  color: #d8b98a;
+}
+
+.explainer b {
+  color: #fff;
+}
+
+/* ---------------------------------------------------------
+   CROSS SELL
+--------------------------------------------------------- */
+
+.cross-sell {
+  background: #0a0700;
+  border: 1px solid var(--dim-orange);
+  padding: 14px 18px;
+  margin-top: 20px;
+  font-size: 13px;
+}
+
+.cross-sell a {
+  color: var(--orange);
+  font-weight: bold;
+}
+
+/* ---------------------------------------------------------
+   FOOTER
+--------------------------------------------------------- */
+
+.poincare-wrap footer {
+  margin-top: 50px;
+  padding-top: 20px;
+  border-top: 1px solid var(--dim-orange);
+  font-size: 11.5px;
+  color: #5c3d1f;
+}
+
+.poincare-wrap footer a {
+  color: var(--orange);
+}
+
+/* ---------------------------------------------------------
+   TABLET / MOBILE
+--------------------------------------------------------- */
+
+@media (max-width: 800px) {
+  .poincare-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-col {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .poincare-btn {
+    grid-column: 1 / -1;
+  }
+
+  .status-line {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 600px) {
+  .poincare-wrap {
+    padding: 0 14px 60px;
+  }
+
+  .poincare-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .poincare-header nav {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .poincare-hero {
+    padding-top: 30px;
+  }
+
+  .poincare-hero h1 {
+    font-size: 23px;
+  }
+
+  .poincare-sub {
+    font-size: 13px;
+  }
+
+  .poincare-panel {
+    padding: 12px;
+  }
+
+  .poincare-panel-title {
+    font-size: 10px;
+  }
+
+  .stats-col {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .explainer {
+    padding: 14px;
+    font-size: 12px;
+  }
+
+  .cross-sell {
+    padding: 13px 14px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .stats-col {
+    grid-template-columns: 1fr;
+  }
+
+  .poincare-btn,
+  .status-line {
+    grid-column: auto;
+  }
+}
