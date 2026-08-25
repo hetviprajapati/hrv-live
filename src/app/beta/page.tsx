@@ -1027,7 +1027,7 @@ export default function HrvLivePage() {
           [
             ['F1', 'ABOUT', handleNavigateToAbout],
             ['F2', 'DEVICES', handleNavigateToDevices],
-            ['F3', 'Poincare', handleNavigateToPoincare],
+            ['F3', 'POINCARE', handleNavigateToPoincare],
             ['F4', 'TREND', null],
             ['F5', 'LOG EXPORT', exportRecording],
             ['F6', 'GLUCOSELIVE', null],
