@@ -1,11 +1,10 @@
-import './about.css';
+'use client';
 
-export const metadata = {
-  title: 'About — HRV.live | Live Autonomic Measurement',
-  description: 'HRV.live shows recovery as it happens — not tomorrow morning.',
-};
+import './about.css';
+import { useRouter } from 'next/navigation';
 
 export default function AboutPage() {
+  const router = useRouter();
   return (
     <main className="about-page">
       <div className="about-wrap">
@@ -23,48 +22,26 @@ export default function AboutPage() {
             </a>
           </div>
         </header>
-
         <div className="about-kicker">Live autonomic measurement</div>
-
         <h1>hrv.live shows recovery as it happens — not tomorrow morning.</h1>
-
         <p className="about-lede">
           True beat-to-beat RMSSD, pNN50, and RR intervals, live in your browser. No smoothing, no averaged score. If your autonomic system
           drops at 2:14pm, you see it at 2:14pm.
         </p>
-
         <p>
           Built because wearables give you a green recovery score while you're overdrawn. Overnight averaging is the right tool for a
           nightly baseline. It's the wrong tool for the moment you're actually trying to measure.
         </p>
-
         <h2>How it works</h2>
-
         <p>
           Connect a chest strap over Bluetooth. Watch your time-domain signal live — RMSSD, pNN50, and the underlying RR intervals, updating
           in real time as you sit in front of it. See load, crash, and recovery in the same window, as they happen.
         </p>
-
         <h2>What it is not</h2>
-
         <p>
           Not wellness. Not a readiness score. A measurement tool for trading floors, performance labs, clinicians, and anyone operating
           under sustained cognitive or physical load who needs to see autonomic state in the moment, not the next morning.
         </p>
-
-        <h2>Evaluation access</h2>
-
-        <div className="beta-box">
-          <div className="beta-price">$199/mo — public beta</div>
-
-          <p>
-            Includes hrv.live/beta, rmssd.com/beta, and priority booking for Time Domain Labs NYC sessions{' '}
-            <em>(launching — details on request)</em>.
-          </p>
-
-          <div className="beta-note">Institutional and partner evaluation access available at no cost — reach out directly below.</div>
-        </div>
-
         <div className="about-signoff">
           Built by Rose. Documented at{' '}
           <a href="https://rmssd.com" target="_blank" rel="noopener noreferrer">
@@ -74,7 +51,6 @@ export default function AboutPage() {
           <br />
           Contact: <a href="mailto:hello@hrv.live">hello@hrv.live</a>
         </div>
-
         <div className="about-disclaimer">
           <p>
             <strong>Disclaimer</strong>
@@ -96,6 +72,14 @@ export default function AboutPage() {
           </p>
 
           <p>You assume full responsibility for use of this site and its data.</p>
+        </div>
+
+        <div className="return-link">
+          RETURN TO{' '}
+          <button type="button" onClick={() => router.push('/beta')} className="return-link-button">
+            HRV.LIVE
+          </button>{' '}
+          DASHBOARD
         </div>
       </div>
     </main>
