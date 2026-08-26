@@ -15,7 +15,7 @@
 .device-wrap {
   max-width: 680px;
   margin: 0 auto;
-  padding: 50px 24px 100px;
+  padding: 30px 18px 70px;
 }
 
 /* Header */
@@ -262,10 +262,6 @@ p a {
 /* Mobile */
 
 @media (max-width: 600px) {
-  .device-wrap {
-    padding: 30px 18px 70px;
-  }
-
   .device-header {
     font-size: 12px;
     gap: 15px;

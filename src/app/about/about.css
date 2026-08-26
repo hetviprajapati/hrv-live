@@ -15,7 +15,7 @@
 .about-wrap {
   max-width: 680px;
   margin: 0 auto;
-  padding: 50px 24px 100px;
+  padding: 30px 18px 70px;
 }
 
 /* Header */
@@ -168,10 +168,6 @@
 /* Mobile */
 
 @media (max-width: 600px) {
-  .about-wrap {
-    padding: 30px 18px 70px;
-  }
-
   .about-header {
     font-size: 12px;
     gap: 15px;

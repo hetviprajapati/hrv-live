@@ -560,19 +560,19 @@ export default function LiveHrvBreathingPage() {
       {/* HEADER */}
 
       <header>
-        <div className="brand">LIVE HEALTH PLATFORM</div>
+        <div className="brand">TIME DOMAIN LABS</div>
 
         <nav>
           <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
             HRV.live
           </a>
 
-          <a href="https://breathingrate.live" className="teal" target="_blank" rel="noopener noreferrer">
-            BreathingRate.live
+          <a href="https://hrv.live/poincare-live" target="_blank" rel="noopener noreferrer">
+            Poincare.live
           </a>
 
-          <a href="https://glucoselive.com" target="_blank" rel="noopener noreferrer">
-            GlucoseLive
+          <a href="https://rmssd.com" target="_blank" rel="noopener noreferrer">
+            rmssd.com
           </a>
         </nav>
       </header>
@@ -700,17 +700,13 @@ export default function LiveHrvBreathingPage() {
         concerns.
         <br />
         <br />
-        Part of the Live Health Platform:{' '}
+        Part of the TIME DOMAIN LABS:{' '}
         <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
           hrv.live
         </a>{' '}
         ·{' '}
-        <a href="https://breathingrate.live" target="_blank" rel="noopener noreferrer">
-          breathingrate.live
-        </a>{' '}
-        ·{' '}
-        <a href="https://glucoselive.com" target="_blank" rel="noopener noreferrer">
-          glucoselive.com
+        <a href="https://hrv.live/poincare-live" className="teal" target="_blank" rel="noopener noreferrer">
+          Poincare.live
         </a>{' '}
         ·{' '}
         <a href="https://rmssd.com" target="_blank" rel="noopener noreferrer">

@@ -155,7 +155,7 @@ export default function PoincarePage() {
 
     const width = parent.clientWidth;
 
-    const height = parent.clientWidth;
+    const height = parent.clientHeight;
 
     if (width <= 0 || height <= 0) {
       return;
@@ -481,7 +481,7 @@ export default function PoincarePage() {
               HRV.live
             </a>
 
-            <a href="https://breathingrate.live" target="_blank" rel="noopener noreferrer">
+            <a href="https://hrv.live/hrv-breathing-live" target="_blank" rel="noopener noreferrer">
               BreathingRate.live
             </a>
 
@@ -587,7 +587,7 @@ export default function PoincarePage() {
             hrv.live
           </a>{' '}
           ·{' '}
-          <a href="https://breathingrate.live" target="_blank" rel="noopener noreferrer">
+          <a href="https://hrv.live/hrv-breathing-live" target="_blank" rel="noopener noreferrer">
             breathingrate.live
           </a>{' '}
           ·{' '}
