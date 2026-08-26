@@ -206,6 +206,10 @@
   background: #020202;
   position: relative;
 }
+.graph-area-declaimer {
+  margin-top: 8px;
+  font-size: 11.5px;
+}
 #traceCanvas {
   width: 100%;
   height: 100%;

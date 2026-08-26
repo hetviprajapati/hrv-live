@@ -580,11 +580,7 @@ export default function LiveHrvBreathingPage() {
       {/* HERO */}
 
       <div className="hero">
-        <h1>
-          Watch your breathing and your heart
-          <br />
-          respond to each other, live.
-        </h1>
+        <h1>Watch your breathing and heart respond to each other, live.</h1>
 
         <p className="sub">
           Connect your chest strap on the left, start your camera on the right. Both run independently and both feed the timeline below — so

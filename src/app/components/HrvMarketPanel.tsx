@@ -48,9 +48,7 @@ export function HrvMarketPanel({
 
           <div className="wl-row">
             <span className="wl-label">1MIN AVG RMSSD</span>
-            <span className="wl-val tk-yellow">
-              {avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}
-            </span>
+            <span className="wl-val tk-yellow">{avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}</span>
           </div>
         </div>
 
@@ -81,6 +79,10 @@ export function HrvMarketPanel({
       <div className="graph-area">
         <canvas ref={canvasRef} />
       </div>
+      <span className="graph-area-declaimer">
+        hrv.live, rmssd.com, and Time Domain Labs tools are for informational and educational purposes only. Not a medical device. Not FDA
+        cleared or approved. No medical advice is provided.
+      </span>
     </div>
   );
 }

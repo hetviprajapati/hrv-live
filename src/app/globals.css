@@ -23,4 +23,5 @@ body {
   font-family: 'Consolas', 'Courier New', Courier, monospace;
   min-height: 100vh;
   font-size: 13px;
+  padding: 15px;
 }
