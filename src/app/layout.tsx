@@ -13,8 +13,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'HRV live',
-  description: 'HRV live',
+  metadataBase: new URL('https://hrv.live'),
+  title: {
+    default: 'HRV.live | Live Heart Rate Variability',
+    template: '%s | HRV.live',
+  },
+  description:
+    'HRV.live provides live heart rate variability measurement using real-time RR intervals, RMSSD, and other time-domain HRV metrics.',
+  applicationName: 'HRV.live',
+  openGraph: {
+    siteName: 'HRV.live',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
