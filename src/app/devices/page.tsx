@@ -2,6 +2,7 @@
 
 import './devices.css';
 import { useRouter } from 'next/navigation';
+import Desclaimer from '../components/Desclaimer/Desclaimer';
 
 export default function DevicePage() {
   const router = useRouter();
@@ -11,14 +12,14 @@ export default function DevicePage() {
       <div className="device-wrap">
         <header className="device-header">
           <div>
-            <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
+            <a href="https://hrv.live" rel="noopener noreferrer">
               HRV.LIVE
             </a>{' '}
             // DEVICES
           </div>
 
           <div>
-            <a href="https://rmssd.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://rmssd.com" rel="noopener noreferrer">
               rmssd.com
             </a>
           </div>
@@ -100,6 +101,7 @@ export default function DevicePage() {
           </div>
         </section>
 
+        <Desclaimer />
         <div className="return-link">
           RETURN TO{' '}
           <button type="button" onClick={() => router.push('/')} className="return-link-button">

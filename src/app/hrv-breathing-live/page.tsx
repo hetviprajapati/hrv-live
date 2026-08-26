@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './page.css';
+import Desclaimer from '../components/Desclaimer/Desclaimer';
 
 type SeriesPoint = {
   t: number;
@@ -563,15 +564,19 @@ export default function LiveHrvBreathingPage() {
         <div className="brand">TIME DOMAIN LABS</div>
 
         <nav>
-          <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
+          <a href="https://hrv.live" rel="noopener noreferrer">
             HRV.live
           </a>
 
-          <a href="https://hrv.live/poincare-live" target="_blank" rel="noopener noreferrer">
+          <a href="https://hrv.live/hrv-breathing-live" className="teal" rel="noopener noreferrer">
+            BreathingRate.live
+          </a>
+
+          <a href="https://hrv.live/poincare-live" rel="noopener noreferrer">
             Poincare.live
           </a>
 
-          <a href="https://rmssd.com" target="_blank" rel="noopener noreferrer">
+          <a href="https://rmssd.com" rel="noopener noreferrer">
             rmssd.com
           </a>
         </nav>
@@ -691,11 +696,8 @@ export default function LiveHrvBreathingPage() {
 
       {/* FOOTER */}
 
+      <Desclaimer />
       <footer>
-        Educational tools, not medical devices. Not intended to diagnose, treat, or monitor any condition. Consult a physician for medical
-        concerns.
-        <br />
-        <br />
         Part of the TIME DOMAIN LABS:{' '}
         <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
           hrv.live

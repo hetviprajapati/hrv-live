@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './poincare.css';
+import Desclaimer from '../components/Desclaimer/Desclaimer';
 
 type PlotPoint = {
   x: number;
@@ -474,18 +475,22 @@ export default function PoincarePage() {
         {/* HEADER */}
 
         <header className="poincare-header">
-          <div className="poincare-brand">POINCARE.LIVE</div>
+          <div className="poincare-brand">TIME DOMAIN LABS</div>
 
           <nav>
-            <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
+            <a href="https://hrv.live" rel="noopener noreferrer">
               HRV.live
             </a>
 
-            <a href="https://hrv.live/hrv-breathing-live" target="_blank" rel="noopener noreferrer">
+            <a href="https://hrv.live/hrv-breathing-live" rel="noopener noreferrer">
               BreathingRate.live
             </a>
 
-            <a href="https://rmssd.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://hrv.live/poincare-live" className="teal" rel="noopener noreferrer">
+              Poincare.live
+            </a>
+
+            <a href="https://rmssd.com"  rel="noopener noreferrer">
               rmssd.com
             </a>
           </nav>
@@ -577,11 +582,9 @@ export default function PoincarePage() {
 
         {/* FOOTER */}
 
+        <Desclaimer />
+
         <footer>
-          poincare.live is an educational and informational tool, not a medical device. Not FDA cleared or approved. Not intended to
-          diagnose, treat, or prevent any condition. Consult a physician for medical concerns.
-          <br />
-          <br />
           Part of the Live Health Platform:{' '}
           <a href="https://hrv.live" target="_blank" rel="noopener noreferrer">
             hrv.live

@@ -1,0 +1,21 @@
+.disclaimer {
+  margin-top: 36px;
+  font-size: 11.5px;
+  color: #5c3d1f;
+  border: 1px dashed #3a2a10;
+  padding: 14px 16px;
+}
+
+.disclaimer p {
+  color: #5c3d1f;
+  font-size: 11.5px;
+  margin-bottom: 8px;
+}
+
+.disclaimer p:last-child {
+  margin-bottom: 0;
+}
+
+.disclaimer strong {
+  color: #5c3d1f;
+}

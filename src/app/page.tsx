@@ -99,7 +99,7 @@ export default function HrvLivePage() {
 
   useHrvChart({ canvasRef, traceData, connected });
 
-  const { rmssd, sdnn, pnn50, avgRmssd60s, heartRate, artifactRate, ready } = snapshot;
+  const { rmssd, sdnn, pnn50, heartRate, artifactRate, ready } = snapshot;
 
   const signalLabel = qualityLabel(artifactRate, ready);
   const signalClass = qualityClass(artifactRate, ready);
@@ -149,66 +149,88 @@ export default function HrvLivePage() {
   }, [router]);
 
   return (
-    <main className="hrv-live">
+    <main className="hrv-main">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(jsonLd),
         }}
       />
-      <TerminalHeader connected={connected} demoMode={demoMode} />
+      <header className="hrv-header">
+        <div className="brand">TIME DOMAIN LABS</div>
+        <nav>
+          <a href="https://hrv.live" className="teal" rel="noopener noreferrer">
+            HRV.live
+          </a>
 
-      <TickerTape
-        heartRate={heartRate}
-        rmssd={rmssd}
-        sdnn={sdnn}
-        pnn50={pnn50}
-        signalLabel={signalLabel}
-        signalClass={signalClass}
-        status={status}
-        statusClass={statusClass}
-      />
+          <a href="https://hrv.live/hrv-breathing-live" rel="noopener noreferrer">
+            BreathingRate.live
+          </a>
 
-      {errorMessage ? (
-        <div className="log-line tk-red" style={{ padding: '4px 10px' }}>
-          {errorMessage}
+          <a href="https://hrv.live/poincare-live" rel="noopener noreferrer">
+            Poincare.live
+          </a>
+
+          <a href="https://rmssd.com" rel="noopener noreferrer">
+            rmssd.com
+          </a>
+        </nav>
+      </header>
+      <div className="hrv-live">
+        <TerminalHeader connected={connected} demoMode={demoMode} />
+
+        <TickerTape
+          heartRate={heartRate}
+          rmssd={rmssd}
+          sdnn={sdnn}
+          pnn50={pnn50}
+          signalLabel={signalLabel}
+          signalClass={signalClass}
+          status={status}
+          statusClass={statusClass}
+        />
+
+        {errorMessage ? (
+          <div className="log-line tk-red" style={{ padding: '4px 10px' }}>
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {exportNote ? (
+          <div className="log-line tk-green" style={{ padding: '4px 10px' }}>
+            {exportNote}
+          </div>
+        ) : null}
+
+        <div className="workspace-scroll">
+          <div className="workspace">
+            <SourceVectorPanel
+              connected={connected}
+              demoMode={demoMode}
+              deviceName={deviceName}
+              snapshot={snapshot}
+              recordedBeats={recordedBeats}
+              signalLabel={signalLabel}
+              signalClass={signalClass}
+              onConnect={connectPolar}
+              onDisconnect={disconnectPolar}
+              onDevices={handleNavigateToDevices}
+            />
+
+            <HrvMarketPanel snapshot={snapshot} delta={delta} signalLabel={signalLabel} signalClass={signalClass} canvasRef={canvasRef} />
+
+            <RrHistoryLog logs={logs} visibleLogs={visibleLogs} />
+          </div>
         </div>
-      ) : null}
 
-      {exportNote ? (
-        <div className="log-line tk-green" style={{ padding: '4px 10px' }}>
-          {exportNote}
-        </div>
-      ) : null}
-
-      <div className="workspace-scroll">
-        <div className="workspace">
-          <SourceVectorPanel
-            connected={connected}
-            demoMode={demoMode}
-            deviceName={deviceName}
-            snapshot={snapshot}
-            recordedBeats={recordedBeats}
-            signalLabel={signalLabel}
-            signalClass={signalClass}
-            onConnect={connectPolar}
-            onDisconnect={disconnectPolar}
-            onDevices={handleNavigateToDevices}
-          />
-
-          <HrvMarketPanel snapshot={snapshot} delta={delta} signalLabel={signalLabel} signalClass={signalClass} canvasRef={canvasRef} />
-
-          <RrHistoryLog logs={logs} visibleLogs={visibleLogs} />
-        </div>
+        <FunctionKeyBar
+          onAbout={handleNavigateToAbout}
+          onDevices={handleNavigateToDevices}
+          onPoincare={handleNavigateToPoincare}
+          onBreathingRate={handleNavigateToBreathingRate}
+          onExport={exportRecording}
+        />
       </div>
-
-      <FunctionKeyBar
-        onAbout={handleNavigateToAbout}
-        onDevices={handleNavigateToDevices}
-        onPoincare={handleNavigateToPoincare}
-        onBreathingRate={handleNavigateToBreathingRate}
-        onExport={exportRecording}
-      />
     </main>
   );
 }

@@ -16,6 +16,12 @@
   max-width: 680px;
   margin: 0 auto;
   padding: 30px 18px 70px;
+
+  .about-page p {
+    margin: 0 0 14px;
+    color: #d8b98a;
+    font-size: 14.5px;
+  }
 }
 
 /* Header */
@@ -69,12 +75,6 @@
   line-height: 1.4;
 }
 
-.about-page p {
-  margin: 0 0 14px;
-  color: #d8b98a;
-  font-size: 14.5px;
-}
-
 .about-page p.about-lede {
   color: var(--orange);
   font-size: 16px;
@@ -126,28 +126,6 @@
 }
 
 /* Disclaimer */
-
-.about-disclaimer {
-  margin-top: 36px;
-  font-size: 11.5px;
-  color: #5c3d1f;
-  border: 1px dashed #3a2a10;
-  padding: 14px 16px;
-}
-
-.about-disclaimer p {
-  color: #5c3d1f;
-  font-size: 11.5px;
-  margin-bottom: 8px;
-}
-
-.about-disclaimer p:last-child {
-  margin-bottom: 0;
-}
-
-.about-disclaimer strong {
-  color: #5c3d1f;
-}
 
 .return-link {
   margin-top: 36px;
