@@ -19,9 +19,6 @@ export function FunctionKeyBar({
     ['F3', 'POINCARE', onPoincare],
     ['F4', 'BREATHING RATE', onBreathingRate],
     ['F5', 'LOG EXPORT', onExport],
-    ['F6', 'GLUCOSELIVE', null],
-    ['F7', 'SETTINGS', null],
-    ['F8', 'PRO UPGRADE', null],
   ];
 
   return (

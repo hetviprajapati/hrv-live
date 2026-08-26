@@ -102,7 +102,7 @@ export default function DevicePage() {
 
         <div className="return-link">
           RETURN TO{' '}
-          <button type="button" onClick={() => router.push('/beta')} className="return-link-button">
+          <button type="button" onClick={() => router.push('/')} className="return-link-button">
             HRV.LIVE
           </button>{' '}
           DASHBOARD

@@ -14,7 +14,7 @@ import {
 import { SessionRecorder, saveRecording } from '@/lib/hrv-live/session-recorder';
 import { formatTimestamp } from '@/utils/hrv-live/hrv-display';
 import { PACKET_GAP_MS, parsePpiMeasurement } from '@/utils/hrv-live/polar';
-import type { LogEntry } from '@/app/beta/types';
+import type { LogEntry } from '@/app/types';
 
 const BEAT_CLOCK_RESYNC_MS = 1500;
 const MAX_TRACE_POINTS = 60;

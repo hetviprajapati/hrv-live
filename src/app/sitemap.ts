@@ -9,7 +9,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
 
     {
-      url: 'https://hrv.live/beta',
+      url: 'https://hrv.live',
       changeFrequency: 'weekly',
       priority: 0.9,
     },

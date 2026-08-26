@@ -20,14 +20,14 @@ export const metadata: Metadata = {
   ],
 
   alternates: {
-    canonical: 'https://hrv.live/beta/about',
+    canonical: 'https://hrv.live/about',
   },
 
   openGraph: {
     title: 'About HRV.live | Live Autonomic Measurement',
     description:
       'Learn how HRV.live provides live beat-to-beat RMSSD, pNN50, and RR interval measurement to observe autonomic changes as they happen.',
-    url: 'https://hrv.live/beta/about',
+    url: 'https://hrv.live/about',
     siteName: 'HRV.live',
     type: 'website',
   },
@@ -50,7 +50,7 @@ const jsonLd = {
 
   name: 'About HRV.live',
 
-  url: 'https://hrv.live/beta/about',
+  url: 'https://hrv.live/about',
 
   description: 'Information about HRV.live and its approach to live autonomic measurement.',
 

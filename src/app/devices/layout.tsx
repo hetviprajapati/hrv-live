@@ -23,13 +23,13 @@ export const metadata: Metadata = {
     'Web Bluetooth HRV',
   ],
   alternates: {
-    canonical: 'https://hrv.live/beta/devices',
+    canonical: 'https://hrv.live/devices',
   },
   openGraph: {
     title: 'HRV Devices | Polar H10 & Compatible Heart Rate Monitors',
     description:
       'Find out which heart rate monitors and chest straps are compatible with HRV.live for live HRV, RMSSD, and RR interval measurement.',
-    url: 'https://hrv.live/beta/devices',
+    url: 'https://hrv.live/devices',
     siteName: 'HRV.live',
     type: 'website',
   },
@@ -48,7 +48,7 @@ const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebPage',
   name: 'HRV Devices | Compatible Heart Rate Monitors',
-  url: 'https://hrv.live/beta/devices',
+  url: 'https://hrv.live/devices',
   description: 'Information about heart rate monitors and chest straps compatible with HRV.live for live HRV measurement.',
   isPartOf: {
     '@type': 'WebSite',

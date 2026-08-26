@@ -49,7 +49,7 @@ export default function AboutPage() {
           </a>
           .
           <br />
-          Contact: <a href="mailto:hello@hrv.live">hello@hrv.live</a>
+          Contact: <a href="mailto:HRVdotLIVE@gmail.com">HRVdotLIVE@gmail.com</a>
         </div>
         <div className="about-disclaimer">
           <p>
@@ -76,7 +76,7 @@ export default function AboutPage() {
 
         <div className="return-link">
           RETURN TO{' '}
-          <button type="button" onClick={() => router.push('/beta')} className="return-link-button">
+          <button type="button" onClick={() => router.push('/')} className="return-link-button">
             HRV.LIVE
           </button>{' '}
           DASHBOARD
