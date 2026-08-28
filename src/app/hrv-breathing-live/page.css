@@ -15,14 +15,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-
     padding: 16px 0;
-
     border-bottom: 1px solid var(--dim-orange);
-
     flex-wrap: wrap;
     gap: 10px;
-
     font-size: 13px;
   }
 

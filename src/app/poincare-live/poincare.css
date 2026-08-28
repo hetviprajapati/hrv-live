@@ -2,7 +2,6 @@
   min-height: 100vh;
   background: var(--bg);
   color: var(--orange);
-  line-height: 1.6;
 }
 
 .poincare-page *,

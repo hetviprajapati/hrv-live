@@ -176,6 +176,16 @@ export default function HrvLivePage() {
           </a>
         </nav>
       </header>
+
+      <div className="hrv-hero">
+        <h1>Watch your nervous system, live.</h1>
+
+        <p className="hrv-sub">
+          Connect a Bluetooth chest strap to see your heart rhythm, heart rate, and RMSSD update beat-by-beat. A calmer, more recovered
+          state is generally associated with higher, more variable rhythm
+        </p>
+      </div>
+
       <div className="hrv-live">
         <TerminalHeader connected={connected} demoMode={demoMode} />
 
