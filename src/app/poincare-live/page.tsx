@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './poincare.css';
-import Desclaimer from '../components/Desclaimer/Desclaimer';
+import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
+import { SiteHeader } from '../components/shared/SiteHeader/SiteHeader';
+import { Hero } from '../components/shared/HeroSection/Hero';
+import { Button } from '../components/shared/Button/Button';
 
 type PlotPoint = {
   x: number;
@@ -474,38 +477,14 @@ export default function PoincarePage() {
       <div className="poincare-wrap">
         {/* HEADER */}
 
-        <header className="poincare-header">
-          <div className="poincare-brand">TIME DOMAIN LABS</div>
-
-          <nav>
-            <a href="https://hrv.live" rel="noopener noreferrer">
-              HRV.live
-            </a>
-
-            <a href="https://hrv.live/hrv-breathing-live" rel="noopener noreferrer">
-              BreathingRate.live
-            </a>
-
-            <a href="https://hrv.live/poincare-live" className="teal" rel="noopener noreferrer">
-              Poincare.live
-            </a>
-
-            <a href="https://rmssd.com"  rel="noopener noreferrer">
-              rmssd.com
-            </a>
-          </nav>
-        </header>
-
+        <SiteHeader activePage="poincare" />
         {/* HERO */}
 
-        <div className="poincare-hero">
-          <h1>Watch your Poincaré plot build, beat by beat.</h1>
-
-          <p className="poincare-sub">
-            Each heartbeat plots one dot — this RR interval against the next. The shape of the cloud is your autonomic state, live: tight
-            and narrow under stress, wide and open when relaxed.
-          </p>
-        </div>
+        <Hero
+          title="Watch your Poincaré plot build, beat by beat."
+          description=" Each heartbeat plots one dot — this RR interval against the next. The shape of the cloud is your autonomic state, live: tight
+            and narrow under stress, wide and open when relaxed."
+        />
 
         {/* STAGE */}
 
@@ -553,9 +532,9 @@ export default function PoincarePage() {
               </div>
             </div>
 
-            <button className="poincare-btn" onClick={connectPolar} disabled={connected}>
+            <Button onClick={connectPolar} disabled={connected}>
               {connected ? 'Connected' : 'Connect Polar H10'}
-            </button>
+            </Button>
 
             <div className="status-line">{status}</div>
           </div>

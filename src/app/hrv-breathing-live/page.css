@@ -11,70 +11,6 @@
     line-height: 1.4;
   }
 
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--dim-orange);
-    flex-wrap: wrap;
-    gap: 10px;
-    font-size: 13px;
-  }
-
-  header .brand {
-    color: #fff;
-    font-weight: bold;
-    letter-spacing: 1px;
-  }
-
-  header nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-
-  header nav a {
-    color: var(--orange);
-    text-decoration: none;
-    margin-left: 0;
-  }
-
-  header nav a {
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-
-  header nav a.teal {
-    color: var(--teal);
-  }
-
-  .hero {
-    padding: 20px 0 20px;
-    text-align: center;
-  }
-
-  .hero h1 {
-    color: #fff;
-
-    font-size: 26px;
-
-    line-height: 1.35;
-
-    margin: 0 0 10px;
-  }
-
-  .sub {
-    color: var(--orange);
-
-    opacity: 0.85;
-
-    font-size: 14.5px;
-
-    margin: 0 auto;
-  }
-
   /* ---------------------------------------------------------
    DUAL PANELS
 --------------------------------------------------------- */
@@ -108,16 +44,19 @@
   }
 
   .panel-title {
-    font-size: 12px;
-
+    font-size: 11px;
     font-weight: bold;
-
-    padding: 3px 8px;
-
+    padding: 2px 6px;
     display: inline-block;
-
     margin-bottom: 14px;
+    letter-spacing: 1px;
+  }
 
+  .panel-title {
+    color: #000;
+    padding: 2px 6px;
+    margin-bottom: 12px;
+    align-self: flex-start;
     letter-spacing: 1px;
   }
 
@@ -268,41 +207,10 @@
    BUTTONS
 --------------------------------------------------------- */
 
-  .btn {
-    font-family: inherit;
-
-    font-weight: bold;
-
-    padding: 12px 20px;
-
-    cursor: pointer;
-
-    font-size: 13px;
-
-    text-transform: uppercase;
-
-    border: none;
-
-    margin-top: 14px;
-
-    width: 100%;
-  }
-
-  .btn.hrv-btn {
-    background: var(--orange);
-    color: #000;
-  }
-
-  .btn.breath-btn {
-    background: var(--teal);
-    color: #000;
-  }
-
-  .btn {
-    &:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
+  .btn-connect-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
   }
 
   .panel.breath .status-line {
@@ -438,18 +346,6 @@
 
     header nav a {
       margin-left: 0;
-    }
-
-    .hero {
-      padding-top: 30px;
-    }
-
-    .hero h1 {
-      font-size: 23px;
-    }
-
-    .sub {
-      font-size: 13px;
     }
 
     .panel {

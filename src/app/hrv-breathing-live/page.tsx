@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './page.css';
-import Desclaimer from '../components/Desclaimer/Desclaimer';
+import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
+import { SiteHeader } from '../components/shared/SiteHeader/SiteHeader';
+import { Hero } from '../components/shared/HeroSection/Hero';
+import { Button } from '../components/shared/Button/Button';
 
 type SeriesPoint = {
   t: number;
@@ -560,38 +563,13 @@ export default function LiveHrvBreathingPage() {
     <div className="breathing-live-wrap">
       {/* HEADER */}
 
-      <header>
-        <div className="brand">TIME DOMAIN LABS</div>
+      <SiteHeader activePage="breathing" />
 
-        <nav>
-          <a href="https://hrv.live" rel="noopener noreferrer">
-            HRV.live
-          </a>
-
-          <a href="https://hrv.live/hrv-breathing-live" className="teal" rel="noopener noreferrer">
-            BreathingRate.live
-          </a>
-
-          <a href="https://hrv.live/poincare-live" rel="noopener noreferrer">
-            Poincare.live
-          </a>
-
-          <a href="https://rmssd.com" rel="noopener noreferrer">
-            rmssd.com
-          </a>
-        </nav>
-      </header>
-
-      {/* HERO */}
-
-      <div className="hero">
-        <h1>Watch your breathing and heart respond to each other, live.</h1>
-
-        <p className="sub">
-          Connect your chest strap on the left, start your camera on the right. Both run independently and both feed the timeline below — so
-          you can watch your HRV move as your breathing slows down, in the same window, in real time.
-        </p>
-      </div>
+      <Hero
+        title="Watch your breathing and heart respond to each other, live."
+        description="Connect your chest strap on the left, start your camera on the right. Both run independently and both feed the timeline below — so
+          you can watch your HRV move as your breathing slows down, in the same window, in real time."
+      />
 
       {/* DUAL PANELS */}
 
@@ -620,11 +598,11 @@ export default function LiveHrvBreathingPage() {
               <div className="gauge-value">{rmssd !== null ? rmssd.toFixed(1) : '--'}</div>
             </div>
           </div>
-
-          <button className="btn hrv-btn" onClick={connectPolar} disabled={hrvState.connected}>
-            {hrvState.connected ? 'Connected' : 'Connect Polar H10'}
-          </button>
-
+          <div className="btn-connect-wrap">
+            <Button onClick={connectPolar} disabled={hrvState.connected}>
+              {hrvState.connected ? 'Connected' : 'Connect Polar H10'}
+            </Button>
+          </div>
           <div className="status-line">{hrvStatus}</div>
         </div>
 
@@ -660,10 +638,11 @@ export default function LiveHrvBreathingPage() {
             </div>
           </div>
 
-          <button className="btn breath-btn" onClick={startCamera} disabled={cameraRunning}>
-            {cameraRunning ? 'Camera Running' : 'Start Camera'}
-          </button>
-
+          <div className="btn-connect-wrap">
+            <Button onClick={startCamera} disabled={cameraRunning} className="teal">
+              {cameraRunning ? 'Camera Running' : 'Start Camera'}
+            </Button>
+          </div>
           <div className="status-line">{breathStatus}</div>
         </div>
       </div>

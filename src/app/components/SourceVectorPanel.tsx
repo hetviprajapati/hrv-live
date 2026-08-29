@@ -1,4 +1,5 @@
 import type { HrvSnapshot } from '@/lib/hrv-live/hrv-engine';
+import { Button } from './shared/Button/Button';
 
 export function SourceVectorPanel({
   connected,
@@ -51,9 +52,9 @@ export function SourceVectorPanel({
         </div>
       ) : null}
 
-      <button className="action-btn" onClick={connected && !demoMode ? onDisconnect : onConnect}>
+      <Button onClick={connected && !demoMode ? onDisconnect : onConnect} className="connect-btn">
         {connected && !demoMode ? '[ DISCONNECT FEED ]' : 'Connect Polar Heart Rate Sensor'}
-      </button>
+      </Button>
 
       <div className="other-device">
         <button type="button" onClick={onDevices} className="other-device-button">

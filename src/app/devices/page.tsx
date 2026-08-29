@@ -2,7 +2,7 @@
 
 import './devices.css';
 import { useRouter } from 'next/navigation';
-import Desclaimer from '../components/Desclaimer/Desclaimer';
+import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
 
 export default function DevicePage() {
   const router = useRouter();

@@ -1,0 +1,40 @@
+.action-btn {
+  background: var(--orange);
+  color: #000;
+  border: none;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.action-btn:active {
+  background: #fff;
+}
+
+.action-btn.teal {
+  background: var(--teal);
+}
+
+@media (min-width: 701px) and (max-width: 1024px) {
+  .action-btn {
+    font-size: 14px;
+    padding: 11px 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  .action-btn {
+    width: 100%;
+    font-size: 13px;
+    padding: 11px 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .action-btn {
+    font-size: 12px;
+  }
+}

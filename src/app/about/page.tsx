@@ -1,6 +1,6 @@
 'use client';
 
-import Desclaimer from '../components/Desclaimer/Desclaimer';
+import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
 import './about.css';
 import { useRouter } from 'next/navigation';
 

@@ -17,69 +17,6 @@
 }
 
 /* ---------------------------------------------------------
-   HEADER
---------------------------------------------------------- */
-
-.poincare-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--dim-orange);
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 13px;
-}
-
-.poincare-brand {
-  color: #fff;
-  font-weight: bold;
-  letter-spacing: 1px;
-}
-
-.poincare-header nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
-.poincare-header nav a {
-  color: var(--orange);
-  text-decoration: none;
-}
-
-.poincare-header nav a.teal {
-  color: var(--teal);
-}
-
-.poincare-header nav a:hover {
-  text-decoration: underline;
-}
-
-/* ---------------------------------------------------------
-   HERO
---------------------------------------------------------- */
-
-.poincare-hero {
-  padding: 20px 0 20px;
-  text-align: center;
-}
-
-.poincare-hero h1 {
-  color: #fff;
-  font-size: 26px;
-  line-height: 1.35;
-  margin: 0 0 10px;
-}
-
-.poincare-sub {
-  color: var(--orange);
-  opacity: 0.85;
-  font-size: 14.5px;
-  margin: 0 auto;
-}
-
-/* ---------------------------------------------------------
    MAIN STAGE
 --------------------------------------------------------- */
 
@@ -96,11 +33,11 @@
 }
 
 .poincare-panel-title {
-  font-size: 12px;
-  font-weight: bold;
   background: var(--orange);
   color: #000;
-  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 6px;
   display: inline-block;
   margin-bottom: 14px;
   letter-spacing: 1px;
@@ -169,28 +106,6 @@
   margin-top: 4px;
 }
 
-/* ---------------------------------------------------------
-   BUTTON
---------------------------------------------------------- */
-
-.poincare-btn {
-  background: var(--orange);
-  color: #000;
-  border: none;
-  font-family: inherit;
-  font-weight: bold;
-  padding: 12px 20px;
-  cursor: pointer;
-  font-size: 13px;
-  text-transform: uppercase;
-  width: 100%;
-}
-
-.poincare-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .status-line {
   font-size: 11px;
   color: var(--dim-orange);
@@ -253,26 +168,6 @@
     padding-bottom: 30px;
   }
 
-  .poincare-header {
-    padding: 8px 0;
-    font-size: 11px;
-  }
-
-  .poincare-hero {
-    padding: 8px 0 10px;
-  }
-
-  .poincare-hero h1 {
-    font-size: 20px;
-    margin-bottom: 3px;
-  }
-
-  .poincare-sub {
-    font-size: 11px;
-    line-height: 1.35;
-    max-width: 850px;
-  }
-
   .poincare-stage {
     grid-template-columns: 1fr 230px;
     gap: 12px;
@@ -282,48 +177,15 @@
     padding: 10px;
   }
 
-  .poincare-panel-title {
-    font-size: 10px;
-    padding: 2px 6px;
-    margin-bottom: 7px;
-  }
-
   .plot-wrapper {
     height: 250px;
     min-height: 0;
-  }
-
-  .axis-label {
-    font-size: 9px;
-    margin-top: 3px;
-  }
-
-  .stat-label {
-    font-size: 8px;
-    line-height: 1.2;
   }
 
   .stat-value {
     font-size: 17px;
     line-height: 1.2;
     margin: 2px 0;
-  }
-
-  .quality-row {
-    font-size: 8px;
-    line-height: 1.2;
-    margin-top: 1px;
-  }
-
-  .poincare-btn {
-    padding: 7px 10px;
-    font-size: 10px;
-  }
-
-  .status-line {
-    font-size: 8px;
-    line-height: 1.2;
-    margin-top: 0;
   }
 
   /* CONTENT BELOW */
@@ -350,10 +212,6 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .poincare-btn {
-    grid-column: 1 / -1;
-  }
-
   .status-line {
     grid-column: 1 / -1;
   }
@@ -364,34 +222,8 @@
     padding: 0 14px 60px;
   }
 
-  .poincare-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .poincare-header nav {
-    width: 100%;
-    gap: 10px;
-  }
-
-  .poincare-hero {
-    padding-top: 30px;
-  }
-
-  .poincare-hero h1 {
-    font-size: 23px;
-  }
-
-  .poincare-sub {
-    font-size: 13px;
-  }
-
   .poincare-panel {
     padding: 12px;
-  }
-
-  .poincare-panel-title {
-    font-size: 10px;
   }
 
   .stats-col {
@@ -418,7 +250,10 @@
     grid-template-columns: 1fr;
   }
 
-  .poincare-btn,
+  .poincare-panel-title {
+    font-size: 10px;
+  }
+
   .status-line {
     grid-column: auto;
   }

@@ -15,6 +15,8 @@ import { useDemoMode } from './../hooks/hrv-live/useDemoMode';
 import { usePolarBluetooth } from './../hooks/hrv-live/usePolarBluetooth';
 import { useHrvChart } from '@/hooks/hrv-live/useHrvChart';
 import { qualityClass, qualityLabel } from './../utils/hrv-live/hrv-display';
+import { SiteHeader } from './components/shared/SiteHeader/SiteHeader';
+import { Hero } from './components/shared/HeroSection/Hero';
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -156,34 +158,14 @@ export default function HrvLivePage() {
           __html: JSON.stringify(jsonLd),
         }}
       />
-      <header className="hrv-header">
-        <div className="brand">TIME DOMAIN LABS</div>
-        <nav>
-          <a href="https://hrv.live" className="teal" rel="noopener noreferrer">
-            HRV.live
-          </a>
+      <div className="hrv-info-section">
+        <SiteHeader activePage="hrv" />
 
-          <a href="https://hrv.live/hrv-breathing-live" rel="noopener noreferrer">
-            BreathingRate.live
-          </a>
-
-          <a href="https://hrv.live/poincare-live" rel="noopener noreferrer">
-            Poincare.live
-          </a>
-
-          <a href="https://rmssd.com" rel="noopener noreferrer">
-            rmssd.com
-          </a>
-        </nav>
-      </header>
-
-      <div className="hrv-hero">
-        <h1>Watch your nervous system, live.</h1>
-
-        <p className="hrv-sub">
-          Connect a Bluetooth chest strap to see your heart rhythm, heart rate, and RMSSD update beat-by-beat. A calmer, more recovered
-          state is generally associated with higher, more variable rhythm
-        </p>
+        <Hero
+          title="Watch your nervous system, live."
+          description="Connect a Bluetooth chest strap to see your heart rhythm, heart rate, and RMSSD update beat-by-beat. A calmer, more recovered
+          state is generally associated with higher, more variable rhythm"
+        />
       </div>
 
       <div className="hrv-live">
