@@ -215,7 +215,7 @@ export class SessionRecorder {
       rmssd: round(snapshot.rmssd),
       sdnn: round(snapshot.sdnn),
       pnn50: round(snapshot.pnn50),
-      avg60: round(snapshot.avgRmssd60s),
+      avg60: round(snapshot.avgRmssd),
       artifactRate: Math.round(snapshot.artifactRate * 1000) / 1000,
       goodBeats: snapshot.goodBeats,
       windowSize: snapshot.windowSize,

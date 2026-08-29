@@ -90,7 +90,7 @@ export type HrvSnapshot = {
   rmssd: number | null;
   sdnn: number | null;
   pnn50: number | null;
-  avgRmssd60s: number | null;
+  avgRmssd: number | null;
  
   /** Good beats in the window, and total beats in the window. */
   goodBeats: number;
@@ -229,7 +229,7 @@ function recordRmssdSample(state: HrvState, at: number): void {
  
   state.rmssdSamples.push({ t: at, v: value });
  
-  const cutoff = at - 60000;
+  const cutoff = at - 300000;
   while (state.rmssdSamples.length > 0 && state.rmssdSamples[0].t < cutoff) {
     state.rmssdSamples.shift();
   }
@@ -248,8 +248,8 @@ export function getSnapshot(
   const meanRr = good.length > 0 ? good.reduce((s, b) => s + b.rr, 0) / good.length : null;
   const over50 = diffs.filter((d) => Math.abs(d) > 50).length;
  
-  const recent = state.rmssdSamples.filter((s) => s.t >= now - 60000);
-  const avg60 = recent.length > 0 ? recent.reduce((s, x) => s + x.v, 0) / recent.length : null;
+  const recent = state.rmssdSamples.filter((s) => s.t >= now - 300000);
+  const avg = recent.length > 0 ? recent.reduce((s, x) => s + x.v, 0) / recent.length : null;
  
   const rmssd = rootMeanSquare(diffs);
  
@@ -258,7 +258,7 @@ export function getSnapshot(
     rmssd,
     sdnn: standardDeviation(good.map((b) => b.rr)),
     pnn50: diffs.length > 0 ? (over50 / diffs.length) * 100 : null,
-    avgRmssd60s: avg60,
+    avgRmssd: avg,
  
     goodBeats: good.length,
     windowSize: beats.length,
@@ -276,7 +276,7 @@ export const EMPTY_SNAPSHOT: HrvSnapshot = {
   rmssd: null,
   sdnn: null,
   pnn50: null,
-  avgRmssd60s: null,
+  avgRmssd: null,
   goodBeats: 0,
   windowSize: 0,
   artifactRate: 0,

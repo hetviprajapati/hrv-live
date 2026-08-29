@@ -14,7 +14,7 @@ export function HrvMarketPanel({
   signalClass: string;
   canvasRef: RefObject<HTMLCanvasElement | null>;
 }) {
-  const { rmssd, sdnn, pnn50, avgRmssd60s, heartRate, artifactRate } = snapshot;
+  const { rmssd, sdnn, pnn50, avgRmssd, heartRate, artifactRate } = snapshot;
 
   return (
     <div className="panel">
@@ -47,8 +47,8 @@ export function HrvMarketPanel({
           </div>
 
           <div className="wl-row">
-            <span className="wl-label">1MIN AVG RMSSD</span>
-            <span className="wl-val tk-yellow">{avgRmssd60s !== null ? `${avgRmssd60s.toFixed(1)} ms` : '-- ms'}</span>
+            <span className="wl-label">5MIN AVG RMSSD</span>
+            <span className="wl-val tk-yellow">{avgRmssd !== null ? `${avgRmssd.toFixed(1)} ms` : '-- ms'}</span>
           </div>
         </div>
 
