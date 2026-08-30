@@ -7,12 +7,14 @@ export function HrvMarketPanel({
   signalLabel,
   signalClass,
   canvasRef,
+  errorMessage,
 }: {
   snapshot: HrvSnapshot;
   delta: number | null;
   signalLabel: string;
   signalClass: string;
   canvasRef: RefObject<HTMLCanvasElement | null>;
+  errorMessage: string;
 }) {
   const { rmssd, sdnn, pnn50, avgRmssd, heartRate, artifactRate } = snapshot;
 
@@ -75,6 +77,13 @@ export function HrvMarketPanel({
           </div>
         </div>
       </div>
+
+      {errorMessage ? (
+        <div className="log-line tk-red error-message" style={{ padding: '4px 10px' }}>
+          {errorMessage}
+          WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS
+        </div>
+      ) : null}
 
       <div className="graph-area">
         <canvas ref={canvasRef} />

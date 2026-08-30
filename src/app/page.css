@@ -276,6 +276,10 @@
   white-space: nowrap;
 }
 
+.error-message {
+  padding-top: 10px;
+}
+
 .control-dock {
   margin-top: 15px;
   border-top: 2px dashed var(--orange);

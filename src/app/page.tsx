@@ -182,12 +182,6 @@ export default function HrvLivePage() {
           statusClass={statusClass}
         />
 
-        {errorMessage ? (
-          <div className="log-line tk-red" style={{ padding: '4px 10px' }}>
-            {errorMessage}
-          </div>
-        ) : null}
-
         {exportNote ? (
           <div className="log-line tk-green" style={{ padding: '4px 10px' }}>
             {exportNote}
@@ -209,7 +203,14 @@ export default function HrvLivePage() {
               onDevices={handleNavigateToDevices}
             />
 
-            <HrvMarketPanel snapshot={snapshot} delta={delta} signalLabel={signalLabel} signalClass={signalClass} canvasRef={canvasRef} />
+            <HrvMarketPanel
+              snapshot={snapshot}
+              delta={delta}
+              signalLabel={signalLabel}
+              signalClass={signalClass}
+              canvasRef={canvasRef}
+              errorMessage={errorMessage}
+            />
 
             <RrHistoryLog logs={logs} visibleLogs={visibleLogs} />
           </div>
