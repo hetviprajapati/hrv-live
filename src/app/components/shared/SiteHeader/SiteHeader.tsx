@@ -9,7 +9,11 @@ type SiteHeaderProps = {
 export function SiteHeader({ activePage }: SiteHeaderProps) {
   return (
     <header className="site-header">
-      <div className="site-brand">TIME DOMAIN LABS</div>
+      <div className="site-brand">
+        <a href="https://hrv.live/time-domain-labs" rel="noopener noreferrer">
+          TIME DOMAIN LABS
+        </a>
+      </div>
 
       <nav>
         <a href="https://hrv.live" className={activePage === 'hrv' ? 'teal' : ''} rel="noopener noreferrer">
