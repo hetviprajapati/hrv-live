@@ -78,12 +78,7 @@ export function HrvMarketPanel({
         </div>
       </div>
 
-      {errorMessage ? (
-        <div className="log-line tk-red error-message" style={{ padding: '4px 10px' }}>
-          {errorMessage}
-          WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS
-        </div>
-      ) : null}
+      {errorMessage ? <div className="tk-red error-message">{errorMessage}</div> : null}
 
       <div className="graph-area">
         <canvas ref={canvasRef} />
