@@ -6,6 +6,7 @@ import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
 import { SiteHeader } from '../components/shared/SiteHeader/SiteHeader';
 import { Hero } from '../components/shared/HeroSection/Hero';
 import { Button } from '../components/shared/Button/Button';
+import { trackEvent } from '@/lib/analytics';
 
 type PlotPoint = {
   x: number;
@@ -269,7 +270,11 @@ export default function PoincarePage() {
    */
 
   const connectPolar = async () => {
+    trackEvent('poincare_connect_click');
     if (!(navigator as any).bluetooth) {
+      trackEvent('poincare_connect_failure', {
+        reason: 'bluetooth_unavailable',
+      });
       setStatus('Web Bluetooth unavailable — use Chrome on desktop/Android, or Bluefy on iOS.');
 
       return;
@@ -302,6 +307,7 @@ export default function PoincarePage() {
       setConnected(true);
 
       setStatus(`Connected: ${device.name || 'chest strap'}`);
+      trackEvent('poincare_connect_success');
 
       /*
        * Receive heart-rate packets
@@ -417,6 +423,10 @@ export default function PoincarePage() {
       });
     } catch (error) {
       console.error(error);
+
+      trackEvent('poincare_connect_failure', {
+        reason: error instanceof Error ? error.name || 'unknown_error' : 'unknown_error',
+      });
 
       setStatus('Connection failed or cancelled.');
 

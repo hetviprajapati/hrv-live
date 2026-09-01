@@ -6,6 +6,7 @@ import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
 import { SiteHeader } from '../components/shared/SiteHeader/SiteHeader';
 import { Hero } from '../components/shared/HeroSection/Hero';
 import { Button } from '../components/shared/Button/Button';
+import { trackEvent } from '@/lib/analytics';
 
 type SeriesPoint = {
   t: number;
@@ -59,7 +60,13 @@ export default function LiveHrvBreathingPage() {
   const rrHistoryRef = useRef<number[]>([]);
 
   const connectPolar = async () => {
+    trackEvent('breathing_rate_connect_click');
+
     if (!(navigator as any).bluetooth) {
+      trackEvent('breathing_rate_connect_failure', {
+        reason: 'bluetooth_unavailable',
+      });
+
       setHrvStatus('Web Bluetooth unavailable — use Chrome on desktop/Android, or Bluefy on iOS.');
 
       return;
@@ -99,6 +106,10 @@ export default function LiveHrvBreathingPage() {
       });
 
       setHrvStatus(`Connected: ${name}`);
+
+      trackEvent('breathing_rate_connect_success', {
+        device_name: name,
+      });
 
       characteristic.addEventListener('characteristicvaluechanged', (event: any) => {
         const target = event.target as any;
@@ -178,6 +189,10 @@ export default function LiveHrvBreathingPage() {
       });
     } catch (error) {
       console.error(error);
+
+      trackEvent('breathing_rate_connect_failure', {
+        reason: error instanceof Error ? error.name || 'connection_error' : 'unknown_error',
+      });
 
       setHrvStatus('Connection failed or cancelled.');
     }
@@ -349,6 +364,8 @@ export default function LiveHrvBreathingPage() {
   }, [elapsedSec]);
 
   const startCamera = async () => {
+    trackEvent('breathing_rate_camera_click');
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -360,6 +377,10 @@ export default function LiveHrvBreathingPage() {
       const video = videoRef.current;
 
       if (!video) {
+        trackEvent('breathing_rate_camera_failure', {
+          reason: 'video_element_unavailable',
+        });
+
         return;
       }
 
@@ -400,8 +421,13 @@ export default function LiveHrvBreathingPage() {
       setCameraRunning(true);
 
       sampleIntervalRef.current = setInterval(sampleFrame, 100);
+
+      trackEvent('breathing_rate_camera_success');
     } catch (error) {
       console.error(error);
+      trackEvent('breathing_rate_camera_failure', {
+        reason: error instanceof Error ? error.name || 'unknown_error' : 'unknown_error',
+      });
 
       setBreathStatus('Camera access denied or unavailable.');
     }
