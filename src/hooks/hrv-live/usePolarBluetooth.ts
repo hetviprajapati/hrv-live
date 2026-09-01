@@ -8,6 +8,7 @@ import {
   POLAR_PMD_SERVICE_UUID,
   isVeritySenseDevice,
 } from '../../utils/hrv-live/polar';
+import { trackEvent } from '@/lib/analytics';
 
 export function usePolarBluetooth({
   resetSession,
@@ -61,10 +62,16 @@ export function usePolarBluetooth({
   );
 
   const connectPolar = useCallback(async () => {
+    trackEvent('hrv_connect_click');
+
     setErrorMessage('');
     stopDemo();
 
     if (!(navigator as any).bluetooth) {
+      trackEvent('hrv_connect_failure', {
+        error_type: 'bluetooth_unavailable',
+      });
+
       setErrorMessage('WEB BLUETOOTH UNAVAILABLE — USE CHROME ON DESKTOP/ANDROID, OR BLUEFY ON iOS');
       return;
     }
@@ -129,8 +136,13 @@ export function usePolarBluetooth({
       setConnected(true);
       setDemoMode(false);
       setDeviceName(name);
+      trackEvent('hrv_connect_success');
     } catch (error) {
       console.error(error);
+
+      trackEvent('hrv_connect_failure', {
+        error_type: error instanceof Error ? error.name : 'unknown',
+      });
 
       const device = bluetoothDeviceRef.current;
       if (device) device.removeEventListener('gattserverdisconnected', handleDeviceDisconnected);
