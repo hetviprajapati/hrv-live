@@ -111,7 +111,7 @@ export default function HrvLivePage() {
     if (!connected) return 'AWAITING SIGNAL';
     if (contactWarning) return 'NO SKIN CONTACT — CHECK THE SENSOR';
     if (rmssd === null) return 'ACQUIRING CLEAN BEATS...';
-    if (rmssd < 20) return 'LOW HRV — ELEVATED STRESS';
+    if (rmssd < 20) return 'LOW HRV';
     if (rmssd < 40) return 'NOMINAL';
     return 'STRONG RECOVERY';
   })();
