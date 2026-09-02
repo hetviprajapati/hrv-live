@@ -211,7 +211,6 @@ export default function HrvLivePage() {
               signalClass={signalClass}
               onConnect={connectPolar}
               onDisconnect={disconnectPolar}
-              onDevices={handleNavigateToDevices}
             />
 
             <HrvMarketPanel
@@ -227,13 +226,7 @@ export default function HrvLivePage() {
           </div>
         </div>
 
-        <FunctionKeyBar
-          onAbout={handleNavigateToAbout}
-          onDevices={handleNavigateToDevices}
-          onPoincare={handleNavigateToPoincare}
-          onBreathingRate={handleNavigateToBreathingRate}
-          onExport={exportRecording}
-        />
+        <FunctionKeyBar onExport={exportRecording} />
       </div>
     </main>
   );

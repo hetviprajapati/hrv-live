@@ -1,21 +1,16 @@
 'use client';
 
 import './devices.css';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
 
 export default function DevicePage() {
-  const router = useRouter();
-
   return (
     <main className="device-page">
       <div className="device-wrap">
         <header className="device-header">
           <div>
-            <a href="https://hrv.live" rel="noopener noreferrer">
-              HRV.LIVE
-            </a>{' '}
-            // DEVICES
+            <Link href="/">HRV.LIVE</Link> // DEVICES
           </div>
 
           <div>
@@ -35,9 +30,9 @@ export default function DevicePage() {
         <p>
           If the underlying hardware misses a millisecond, the mathematical reality of your autonomic state is corrupted. Because we do not
           smooth, dampen, or approximate your data,{' '}
-          <a href="https://hrv.live/" target="_blank" rel="noopener noreferrer" className="device-inline-link">
+          <Link href="/" className="device-inline-link">
             Hrv.live
-          </a>{' '}
+          </Link>{' '}
           enforces strict hardware standards.
         </p>
 
@@ -104,9 +99,9 @@ export default function DevicePage() {
         <Desclaimer />
         <div className="return-link">
           RETURN TO{' '}
-          <button type="button" onClick={() => router.push('/')} className="return-link-button">
+          <Link href="/" className="return-link-button">
             HRV.LIVE
-          </button>{' '}
+          </Link>{' '}
           DASHBOARD
         </div>
       </div>

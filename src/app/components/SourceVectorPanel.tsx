@@ -1,5 +1,6 @@
 import type { HrvSnapshot } from '@/lib/hrv-live/hrv-engine';
 import { Button } from './shared/Button/Button';
+import Link from 'next/link';
 
 export function SourceVectorPanel({
   connected,
@@ -11,7 +12,6 @@ export function SourceVectorPanel({
   signalClass,
   onConnect,
   onDisconnect,
-  onDevices,
 }: {
   connected: boolean;
   demoMode: boolean;
@@ -22,7 +22,6 @@ export function SourceVectorPanel({
   signalClass: string;
   onConnect: () => void;
   onDisconnect: () => void;
-  onDevices: () => void;
 }) {
   return (
     <div className="panel vector-box">
@@ -57,9 +56,9 @@ export function SourceVectorPanel({
       </Button>
 
       <div className="other-device">
-        <button type="button" onClick={onDevices} className="other-device-button">
+        <Link href="/devices" className="other-device-button">
           Other devices?
-        </button>
+        </Link>
       </div>
     </div>
   );

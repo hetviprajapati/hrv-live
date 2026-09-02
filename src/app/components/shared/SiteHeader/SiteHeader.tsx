@@ -1,5 +1,5 @@
 'use client';
-
+import Link from 'next/link';
 import './SiteHeader.css';
 
 type SiteHeaderProps = {
@@ -10,23 +10,21 @@ export function SiteHeader({ activePage }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-brand">
-        <a href="https://hrv.live/time-domain-labs" rel="noopener noreferrer">
-          TIME DOMAIN LABS
-        </a>
+        <Link href="/time-domain-labs">TIME DOMAIN LABS</Link>
       </div>
 
       <nav>
-        <a href="https://hrv.live" className={activePage === 'hrv' ? 'teal' : ''} rel="noopener noreferrer">
+        <Link href="/" className={activePage === 'hrv' ? 'teal' : ''}>
           HRV.live
-        </a>
+        </Link>
 
-        <a href="https://hrv.live/hrv-breathing-live" className={activePage === 'breathing' ? 'teal' : ''} rel="noopener noreferrer">
+        <Link href="/hrv-breathing-live" className={activePage === 'breathing' ? 'teal' : ''}>
           BreathingRate.live
-        </a>
+        </Link>
 
-        <a href="https://hrv.live/poincare-live" className={activePage === 'poincare' ? 'teal' : ''} rel="noopener noreferrer">
+        <Link href="/poincare-live" className={activePage === 'poincare' ? 'teal' : ''}>
           Poincare.live
-        </a>
+        </Link>
 
         <a href="https://rmssd.com" className={activePage === 'rmssd' ? 'teal' : ''} rel="noopener noreferrer">
           rmssd.com

@@ -2,18 +2,15 @@
 
 import Desclaimer from '../components/shared/Desclaimer/Desclaimer';
 import './about.css';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function AboutPage() {
-  const router = useRouter();
   return (
     <main className="about-page">
       <div className="about-wrap">
         <header className="about-header">
           <div>
-            <a href="https://hrv.live" rel="noopener noreferrer">
-              HRV.LIVE
-            </a>{' '}
+            <Link href="/">HRV.LIVE</Link>
             // ABOUT
           </div>
 
@@ -56,9 +53,9 @@ export default function AboutPage() {
 
         <div className="return-link">
           RETURN TO{' '}
-          <button type="button" onClick={() => router.push('/')} className="return-link-button">
+          <Link href="/" className="return-link-button">
             HRV.LIVE
-          </button>{' '}
+          </Link>{' '}
           DASHBOARD
         </div>
       </div>

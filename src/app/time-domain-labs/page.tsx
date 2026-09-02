@@ -1,4 +1,5 @@
 import './TimeDomainLab.css';
+import Link from 'next/link';
 
 export default function TimeDomainLabPage() {
   return (
@@ -60,32 +61,32 @@ export default function TimeDomainLabPage() {
           <h2>What we&apos;ve built</h2>
 
           <div className="tdl-asset-list">
-            <a href="https://hrv.live" className="tdl-asset-row" target="_blank" rel="noopener noreferrer">
+            <Link href="/" className="tdl-asset-row">
               <div>
                 <div className="tdl-asset-name">HRV.live</div>
                 <div className="tdl-asset-desc">Live RMSSD from any Bluetooth chest strap — recovery and load, in real time.</div>
               </div>
 
               <div className="tdl-asset-type">LIVE TOOL</div>
-            </a>
+            </Link>
 
-            <a href="https://hrv.live/poincare-live" className="tdl-asset-row" target="_blank" rel="noopener noreferrer">
+            <Link href="/poincare-live" className="tdl-asset-row">
               <div>
                 <div className="tdl-asset-name">Poincare.live</div>
                 <div className="tdl-asset-desc">A live Poincaré plot of your RR intervals, with SD1/SD2 calculated beat by beat.</div>
               </div>
 
               <div className="tdl-asset-type">LIVE TOOL</div>
-            </a>
+            </Link>
 
-            <a href="https://hrv.live/hrv-breathing-live" className="tdl-asset-row" target="_blank" rel="noopener noreferrer">
+            <Link href="/hrv-breathing-live" className="tdl-asset-row">
               <div>
                 <div className="tdl-asset-name">BreathingRate.live</div>
                 <div className="tdl-asset-desc">Real breathing rate from a camera alone — no wearable required.</div>
               </div>
 
               <div className="tdl-asset-type">LIVE TOOL</div>
-            </a>
+            </Link>
 
             <a href="https://rmssd.com" className="tdl-asset-row" target="_blank" rel="noopener noreferrer">
               <div>
