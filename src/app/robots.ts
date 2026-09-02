@@ -8,5 +8,7 @@ export default function robots(): MetadataRoute.Robots {
     },
 
     sitemap: 'https://hrv.live/sitemap.xml',
+
+    host: 'https://hrv.live',
   };
 }

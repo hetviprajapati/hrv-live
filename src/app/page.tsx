@@ -17,29 +17,45 @@ import { useHrvChart } from '@/hooks/hrv-live/useHrvChart';
 import { qualityClass, qualityLabel } from './../utils/hrv-live/hrv-display';
 import { SiteHeader } from './components/shared/SiteHeader/SiteHeader';
 import { Hero } from './components/shared/HeroSection/Hero';
+import { JsonLd } from './components/shared/JsonLd/JsonLd';
 
 const jsonLd = {
   '@context': 'https://schema.org',
-  '@type': 'WebApplication',
 
-  name: 'HRV.live',
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': 'https://hrv.live/#website',
 
-  url: 'https://hrv.live',
+      name: 'HRV.live',
 
-  description:
-    'A browser-based live heart rate variability measurement tool providing real-time RMSSD, SDNN, pNN50, heart rate, and RR interval data.',
+      url: 'https://hrv.live/',
 
-  applicationCategory: 'HealthApplication',
+      description: 'Live browser-based heart rate variability measurement tools.',
+    },
 
-  operatingSystem: 'Web Browser',
+    {
+      '@type': 'WebApplication',
+      '@id': 'https://hrv.live/#webapp',
 
-  browserRequirements: 'Requires a browser with Web Bluetooth support and a compatible heart rate sensor.',
+      name: 'HRV.live',
 
-  isPartOf: {
-    '@type': 'WebSite',
-    name: 'HRV.live',
-    url: 'https://hrv.live',
-  },
+      url: 'https://hrv.live/',
+
+      description:
+        'A browser-based live heart rate variability measurement tool providing real-time RMSSD, SDNN, pNN50, heart rate, and RR interval data.',
+
+      applicationCategory: 'HealthApplication',
+
+      operatingSystem: 'Any',
+
+      browserRequirements: 'Requires a browser with Web Bluetooth support and a compatible heart rate sensor.',
+
+      isPartOf: {
+        '@id': 'https://hrv.live/#website',
+      },
+    },
+  ],
 };
 
 const VISIBLE_LOG_ROWS = HRV_CONFIG.windowBeats;
@@ -152,12 +168,7 @@ export default function HrvLivePage() {
 
   return (
     <main className="hrv-main">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd),
-        }}
-      />
+      <JsonLd data={jsonLd} />
       <div className="hrv-info-section">
         <SiteHeader activePage="hrv" />
 

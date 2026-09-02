@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { JsonLd } from '../components/shared/JsonLd/JsonLd';
 
 export const metadata: Metadata = {
   title: 'About HRV.live | Live Autonomic Measurement',
@@ -6,28 +7,15 @@ export const metadata: Metadata = {
   description:
     'Learn how HRV.live provides live beat-to-beat RMSSD, pNN50, and RR interval measurement to observe autonomic changes as they happen.',
 
-  keywords: [
-    'HRV',
-    'HRV.live',
-    'heart rate variability',
-    'live HRV',
-    'live autonomic measurement',
-    'RMSSD',
-    'pNN50',
-    'RR intervals',
-    'real-time HRV',
-    'autonomic activity',
-  ],
-
   alternates: {
-    canonical: 'https://hrv.live/about',
+    canonical: '/about',
   },
 
   openGraph: {
     title: 'About HRV.live | Live Autonomic Measurement',
     description:
       'Learn how HRV.live provides live beat-to-beat RMSSD, pNN50, and RR interval measurement to observe autonomic changes as they happen.',
-    url: 'https://hrv.live/about',
+    url: '/about',
     siteName: 'HRV.live',
     type: 'website',
   },
@@ -46,7 +34,10 @@ export const metadata: Metadata = {
 
 const jsonLd = {
   '@context': 'https://schema.org',
+
   '@type': 'AboutPage',
+
+  '@id': 'https://hrv.live/about#webpage',
 
   name: 'About HRV.live',
 
@@ -55,23 +46,19 @@ const jsonLd = {
   description: 'Information about HRV.live and its approach to live autonomic measurement.',
 
   isPartOf: {
-    '@type': 'WebSite',
-    name: 'HRV.live',
-    url: 'https://hrv.live',
+    '@id': 'https://hrv.live/#website',
+  },
+
+  about: {
+    '@id': 'https://hrv.live/#webapp',
   },
 };
 
 export default function AboutLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
+      <JsonLd data={jsonLd} />
       {children}
-
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd),
-        }}
-      />
     </>
   );
 }

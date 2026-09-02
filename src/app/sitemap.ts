@@ -1,29 +1,26 @@
 import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
+  const baseUrl = 'https://hrv.live';
+
   return [
     {
-      url: 'https://hrv.live/',
-      changeFrequency: 'weekly',
-      priority: 1,
+      url: `${baseUrl}/`,
     },
-
     {
-      url: 'https://hrv.live',
-      changeFrequency: 'weekly',
-      priority: 0.9,
+      url: `${baseUrl}/hrv-breathing-live`,
     },
-
     {
-      url: 'https://hrv.live/about',
-      changeFrequency: 'monthly',
-      priority: 0.7,
+      url: `${baseUrl}/poincare-live`,
     },
-
     {
-      url: 'https://hrv.live/devices',
-      changeFrequency: 'monthly',
-      priority: 0.8,
+      url: `${baseUrl}/time-domain-labs`,
+    },
+    {
+      url: `${baseUrl}/about`,
+    },
+    {
+      url: `${baseUrl}/devices`,
     },
   ];
 }
